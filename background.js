@@ -67,6 +67,22 @@ async function captureCurrentTab(tab) {
   if (!tab?.id) return;
   
   try {
+    // 0. 等待SPA页面完全加载 + xhs-bridge 重新注入
+    await new Promise(r => setTimeout(r, 800));
+
+    // 0.5 清空旧页面的 API 缓存
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => {
+          if (window.__QIANCHENG_XHS_RESPONSES__) {
+            window.__QIANCHENG_XHS_RESPONSES__ = window.__QIANCHENG_XHS_RESPONSES__.slice(-20);
+          }
+        },
+        world: 'MAIN',
+      });
+    } catch(e) {}
+    
     // 1. 从 content script 获取 DOM 数据
     let pageInfo = {};
     try { pageInfo = await chrome.tabs.sendMessage(tab.id, { type: 'extract-page' }); } catch(e) {}
@@ -93,45 +109,30 @@ async function captureCurrentTab(tab) {
         target: { tabId: tab.id },
         func: () => {
           const urls = new Set();
-          // 判断是否小红书笔记详情页
           const isNotePage = /^\/(explore|discovery\/item)\//i.test(location.pathname);
-          const isYouTube = location.hostname.includes('youtube.com');
           
-          // 策略1: 小红书笔记页 - 只抓笔记内容区域的图片
+          // 小红色笔记页: 抓所有大尺寸img(宽>200 高>200)
           if (isNotePage) {
-            // 笔记轮播图区域（最核心的图片）
-            const noteArea = document.querySelector('#noteContainer, [class*="note"], .note-scroller, .note-image, [class*="detail"]');
-            const container = noteArea || document;
-            
-            // swiper 轮播图
-            container.querySelectorAll('.swiper-slide img, [class*="swiper"] img, [class*="carousel"] img, [class*="slide"] img').forEach(img => {
+            document.querySelectorAll('img').forEach(img => {
               const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-original') || '';
-              if (src && src.startsWith('http')) urls.add(src);
+              if (!src || !src.startsWith('http')) return;
+              if (src.includes('favicon') || src.includes('emoji')) return;
+              const w = img.naturalWidth || img.width || 0;
+              const h = img.naturalHeight || img.height || 0;
+              // 尺寸过滤: 只取大图(高≥200) 或 svg/lazy 未加载的(宽=0,通过src特征判断)
+              if ((w > 0 && h > 0 && (w < 50 || h < 50)) || (w === 0 && h === 0 && src.includes('avatar'))) return;
+              urls.add(src);
             });
-            
-            // 如果轮播没抓到，尝试从笔记区域的所有 img
-            if (urls.size === 0 && noteArea) {
-              noteArea.querySelectorAll('img').forEach(img => {
-                const src = img.src || img.getAttribute('data-src') || '';
-                if (src && src.startsWith('http') && !src.includes('avatar') && !src.includes('icon')) {
-                  urls.add(src);
-                }
-              });
-            }
-            
-            // og:image 作为兜底
-            if (urls.size === 0) {
-              const og = document.querySelector('meta[property="og:image"]');
-              if (og && og.content && og.content.startsWith('http')) urls.add(og.content);
-            }
-          }
-          // 策略2: YouTube
-          else if (isYouTube) {
+            // 也抓后台背景图
+            document.querySelectorAll('[class*="slide"], [class*="swiper"], [style*="background"]').forEach(el => {
+              const bg = (el.style && el.style.backgroundImage) || getComputedStyle(el).backgroundImage;
+              const match = bg && bg.match(/url\(["']?(.+?)["']?\)/);
+              if (match && match[1] && match[1].startsWith('http') && !match[1].includes('avatar')) urls.add(match[1]);
+            });
+          } else if (location.hostname.includes('youtube.com')) {
             const thumb = document.querySelector('meta[property="og:image"]');
             if (thumb && thumb.content && thumb.content.startsWith('http')) urls.add(thumb.content);
-          }
-          // 策略3: 通用网页 - og:image
-          else {
+          } else {
             const og = document.querySelector('meta[property="og:image"]');
             if (og && og.content && og.content.startsWith('http')) urls.add(og.content);
           }
