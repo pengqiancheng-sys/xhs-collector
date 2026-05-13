@@ -131,17 +131,11 @@ async function captureCurrentTab(tab) {
     console.log('📥 采集数据:', { title: title.substring(0,40), author, platform, textLen: text.length, apiImages: apiData?.images?.length||0, domImages: domImages.length, pageImages: pageInfo?.images?.length||0, finalImages: images.length });
     console.log('📸 图片URLs:', images.slice(0, 5));
 
-    // 4. 上传图片
-    let fileTokens = [];
+    // 4. 收集图片URL（飞书drive上传API暂不可用，先存链接）
     const maxImg = Math.min(images.length, 9);
-    console.log(`📸 开始上传 ${maxImg} 张图片...`);
-    for (let i = 0; i < maxImg; i++) {
-      try {
-        const ft = await uploadImage(images[i], i);
-        if (ft) fileTokens.push({ file_token: ft });
-      } catch(e) { console.warn(`图片${i}上传失败:`, e.message); }
-    }
-    console.log('📸 图片上传:', fileTokens.length, '/', maxImg);
+    console.log(`📸 图片 ${images.length} 张, 取前 ${maxImg} 张`); 
+    const imageUrls = images.slice(0, maxImg).join('\n');
+    console.log('📸 图片URLs:', images.slice(0, 3));
 
     // 5. 构建字段
     const fields = {
@@ -154,7 +148,8 @@ async function captureCurrentTab(tab) {
       '优先级': '中',
     };
     if (sourceUrl) fields['来源链接'] = { link: sourceUrl, text: title.substring(0, 50) };
-    if (fileTokens.length) fields['素材图片'] = fileTokens;
+    // 图片URL写入文本字段（飞书drive upload API 1061002 params error 暂不可用）
+    if (imageUrls) fields['图片链接（临时）'] = imageUrls;
 
     // 6. 写入飞书
     const token = await getToken();
@@ -309,7 +304,8 @@ async function collectBloggerNotes(tabId, limit, intervalMs) {
         '优先级': '中',
       };
       if (n.note_id) fields['来源链接'] = { link: `https://www.xiaohongshu.com/explore/${n.note_id}`, text: n.title };
-      if (fileTokens.length) fields['素材图片'] = fileTokens;
+      // 图片URL写入文本字段（飞书drive upload API 1061002 params error 暂不可用）
+    if (imageUrls) fields['图片链接（临时）'] = imageUrls;
 
       const token = await getToken();
       await fetch(`${FEISHU_BASE}/apps/${APP_TOKEN}/tables/${TABLE_ID}/records`, {
