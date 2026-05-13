@@ -93,24 +93,50 @@ async function captureCurrentTab(tab) {
         target: { tabId: tab.id },
         func: () => {
           const urls = new Set();
-          // 遍历所有 img 标签
-          document.querySelectorAll('img').forEach(img => {
-            const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-original') || '';
-            if (src && src.startsWith('http')) urls.add(src);
-          });
-          // 小红书特有的 swiper 轮播图
-          document.querySelectorAll('.swiper-slide, [class*="slide"]').forEach(slide => {
-            const bg = getComputedStyle(slide).backgroundImage;
-            const match = bg && bg.match(/url\("(.+)"\)/);
-            if (match && match[1]) urls.add(match[1]);
-            slide.querySelectorAll('img').forEach(img => {
-              if (img.src && img.src.startsWith('http')) urls.add(img.src);
+          // 判断是否小红书笔记详情页
+          const isNotePage = /^\/(explore|discovery\/item)\//i.test(location.pathname);
+          const isYouTube = location.hostname.includes('youtube.com');
+          
+          // 策略1: 小红书笔记页 - 只抓笔记内容区域的图片
+          if (isNotePage) {
+            // 笔记轮播图区域（最核心的图片）
+            const noteArea = document.querySelector('#noteContainer, [class*="note"], .note-scroller, .note-image, [class*="detail"]');
+            const container = noteArea || document;
+            
+            // swiper 轮播图
+            container.querySelectorAll('.swiper-slide img, [class*="swiper"] img, [class*="carousel"] img, [class*="slide"] img').forEach(img => {
+              const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-original') || '';
+              if (src && src.startsWith('http')) urls.add(src);
             });
-          });
-          // 也抓 og:image
-          const og = document.querySelector('meta[property="og:image"]');
-          if (og && og.content && og.content.startsWith('http')) urls.add(og.content);
-          return Array.from(urls);
+            
+            // 如果轮播没抓到，尝试从笔记区域的所有 img
+            if (urls.size === 0 && noteArea) {
+              noteArea.querySelectorAll('img').forEach(img => {
+                const src = img.src || img.getAttribute('data-src') || '';
+                if (src && src.startsWith('http') && !src.includes('avatar') && !src.includes('icon')) {
+                  urls.add(src);
+                }
+              });
+            }
+            
+            // og:image 作为兜底
+            if (urls.size === 0) {
+              const og = document.querySelector('meta[property="og:image"]');
+              if (og && og.content && og.content.startsWith('http')) urls.add(og.content);
+            }
+          }
+          // 策略2: YouTube
+          else if (isYouTube) {
+            const thumb = document.querySelector('meta[property="og:image"]');
+            if (thumb && thumb.content && thumb.content.startsWith('http')) urls.add(thumb.content);
+          }
+          // 策略3: 通用网页 - og:image
+          else {
+            const og = document.querySelector('meta[property="og:image"]');
+            if (og && og.content && og.content.startsWith('http')) urls.add(og.content);
+          }
+          
+          return Array.from(urls).slice(0, 12);
         },
       });
       if (imgResults?.[0]?.result) domImages = imgResults[0].result;
