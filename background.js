@@ -75,69 +75,58 @@ async function captureCurrentTab(tab) {
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: () => {
-          if (window.__QIANCHENG_XHS_RESPONSES__) {
-            window.__QIANCHENG_XHS_RESPONSES__ = window.__QIANCHENG_XHS_RESPONSES__.slice(-20);
-          }
-        },
-        world: 'MAIN',
-      });
-    } catch(e) {}
-    
-    // 1. 从 content script 获取 DOM 数据
-    let pageInfo = {};
-    try { pageInfo = await chrome.tabs.sendMessage(tab.id, { type: 'extract-page' }); } catch(e) {}
-
-    // 2. 从 xhs-bridge (MAIN) 获取 API 精确数据
-    let apiData = null;
-    try {
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => {
-          const store = window.__QIANCHENG_XHS_RESPONSES__ || [];
-          const latest = store.filter(r => r.note).slice(-1);
-          return latest.length ? latest[0].note : null;
-        },
-        world: 'MAIN',
-      });
-      if (results?.[0]?.result) apiData = results[0].result;
-    } catch(e) { console.warn('API data fetch:', e.message); }
-
-    // 2.5 专用图片抓取 - 直接在页面上遍历所有 img/背景图
-    let domImages = [];
-    try {
-      const imgResults = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => {
-          const urls = new Set();
+          const urls = [];
+          const pushUrl = (u) => { if (u && u.startsWith('http') && !urls.includes(u)) urls.push(u); };
+          const isComment = (el) => {
+            while (el) {
+              if (el.closest && (el.closest('.comments, [class*="comment"], .comment-container, .note-comment, #comment'))) return true;
+              el = el.parentElement;
+            }
+            return false;
+          };
+          
           const isNotePage = /^\/(explore|discovery\/item)\//i.test(location.pathname);
-          
-          // 小红色笔记页: 抓所有大尺寸img(宽>200 高>200)
+
+          // === 小红书笔记页 ===
           if (isNotePage) {
-            document.querySelectorAll('img').forEach(img => {
-              const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-original') || '';
-              if (!src || !src.startsWith('http')) return;
-              if (src.includes('favicon') || src.includes('emoji')) return;
-              const w = img.naturalWidth || img.width || 0;
-              const h = img.naturalHeight || img.height || 0;
-              // 尺寸过滤: 只取大图(高≥200) 或 svg/lazy 未加载的(宽=0,通过src特征判断)
-              if ((w > 0 && h > 0 && (w < 50 || h < 50)) || (w === 0 && h === 0 && src.includes('avatar'))) return;
-              urls.add(src);
+            // 优先: 从 swiper 轮播图按顺序取
+            const swiperSlides = Array.from(document.querySelectorAll('.note-slider .swiper-slide, .swiper .swiper-slide'))
+              .filter(s => !s.classList.contains('swiper-slide-duplicate') && !isComment(s));
+            
+            swiperSlides.forEach(slide => {
+              const img = slide.querySelector('img');
+              if (img) {
+                pushUrl(img.getAttribute('src') || img.getAttribute('data-src') || img.src || img.currentSrc);
+              }
             });
-            // 也抓后台背景图
-            document.querySelectorAll('[class*="slide"], [class*="swiper"], [style*="background"]').forEach(el => {
-              const bg = (el.style && el.style.backgroundImage) || getComputedStyle(el).backgroundImage;
-              const match = bg && bg.match(/url\(["']?(.+?)["']?\)/);
-              if (match && match[1] && match[1].startsWith('http') && !match[1].includes('avatar')) urls.add(match[1]);
-            });
-          } else if (location.hostname.includes('youtube.com')) {
+
+            // 兜底: 如果轮播没图，从 .note-content .img-container 取
+            if (!urls.length) {
+              document.querySelectorAll('.img-container img, .note-content img, [class*="note-image"] img').forEach(img => {
+                if (!isComment(img) && !img.closest('[class*="avatar"]')) {
+                  pushUrl(img.getAttribute('src') || img.src || '');
+                }
+              });
+            }
+
+            // 兜底2: og:image
+            if (!urls.length) {
+              const og = document.querySelector('meta[property="og:image"]');
+              if (og && og.content) pushUrl(og.content);
+            }
+          }
+          // === YouTube ===
+          else if (location.hostname.includes('youtube.com')) {
             const thumb = document.querySelector('meta[property="og:image"]');
-            if (thumb && thumb.content && thumb.content.startsWith('http')) urls.add(thumb.content);
-          } else {
+            if (thumb && thumb.content) pushUrl(thumb.content);
+          }
+          // === 通用网页 ===
+          else {
             const og = document.querySelector('meta[property="og:image"]');
-            if (og && og.content && og.content.startsWith('http')) urls.add(og.content);
+            if (og && og.content) pushUrl(og.content);
           }
           
-          return Array.from(urls).slice(0, 12);
+          return urls.slice(0, 12);
         },
       });
       if (imgResults?.[0]?.result) domImages = imgResults[0].result;
