@@ -154,14 +154,17 @@ async function captureCurrentTab(tab) {
     let sourceUrl = tab.url || pageInfo?.url || '';
     if (!sourceUrl && noteId) sourceUrl = `https://www.xiaohongshu.com/explore/${noteId}`;
 
-    console.log('📥 采集数据:', { title: title.substring(0,40), author, platform, textLen: text.length, apiImages: apiData?.images?.length||0, domImages: domImages.length, pageImages: pageInfo?.images?.length||0, finalImages: images.length });
-    console.log('📸 图片URLs:', images.slice(0, 5));
+    console.log('📥 数据:', { title: title.substring(0,40), author, platform, images: images.length });
 
-    // 4. 收集图片URL（飞书drive上传API暂不可用，先存链接）
-    const maxImg = Math.min(images.length, 9);
-    console.log(`📸 图片 ${images.length} 张, 取前 ${maxImg} 张`); 
-    const imageUrls = images.slice(0, maxImg).join('\n');
-    console.log('📸 图片URLs:', images.slice(0, 3));
+    // 4. 上传图片
+    let fileTokens = [];
+    for (let i = 0; i < Math.min(images.length, 9); i++) {
+      try {
+        const ft = await uploadImage(images[i], i);
+        if (ft) fileTokens.push({ file_token: ft });
+      } catch(e) { console.warn(`图片${i}:`, e.message); }
+    }
+    console.log('📸 上传:', fileTokens.length, '/', Math.min(images.length, 9));
 
     // 5. 构建字段
     const fields = {
