@@ -17,9 +17,9 @@ const MAX_IMAGES = 9; // 每条记录最多9张图
 const UPDATE_STATE_KEY = 'qiancheng_update_state';
 const UPDATE_ALARM_NAME = 'qc-plugin-auto-update';
 const UPDATE_CHECK_INTERVAL_MINUTES = 360;
-const UPDATE_SOURCE_MANIFEST_URL = 'https://raw.githubusercontent.com/Jamailar/RedBox/main/Plugin/manifest.json';
+const UPDATE_SOURCE_MANIFEST_URL = 'https://raw.githubusercontent.com/pengqiancheng-sys/xhs-collector/main/manifest.json';
 // TODO: 替换为前程智囊团自己的 manifest URL
-const UPDATE_SOURCE_REPO_URL = 'https://github.com/qian/.openclaw/workspace-qian/extensions/xhs-collector-v2';
+const UPDATE_SOURCE_REPO_URL = 'https://github.com/pengqiancheng-sys/xhs-collector';
 
 
 // ====== 状态 ======
