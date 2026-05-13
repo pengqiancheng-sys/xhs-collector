@@ -230,11 +230,56 @@ async function capturePage(t) {
     if (r?.[0]?.result) images = r[0].result;
   } catch {}
 
+  // 专门提取正文（DOM深度解析经常失败，这里再兜底一次）
+  let domText = pageInfo?.text || '';
+  let domPlatform = pageInfo?.platform || '';
+  if (!domText || domText.length < 50) {
+    try {
+      const r = await chrome.scripting.executeScript({
+        target: { tabId: t.tabId },
+        func: () => {
+          // 小红书正文专用提取
+          const host = location.hostname;
+          if (host.includes('xiaohongshu.com') || host.includes('rednote.com')) {
+            // 按优先级尝试
+            const selectors = [
+              '#detail-desc', '.note-text', '.desc', '[class*="desc"]',
+              '.note-content', '[class*="note-content"]',
+              '#noteContainer .content', '.note-scroller .content',
+            ];
+            for (const sel of selectors) {
+              const el = document.querySelector(sel);
+              if (el) {
+                const t = (el.textContent || '').trim();
+                if (t.length > 30) return { text: t.substring(0, 5000), platform: 'xhs' };
+              }
+            }
+            // 兜底: 所有符合选择器的元素中最长文本
+            const all = document.querySelectorAll(selectors.join(','));
+            let best = '';
+            all.forEach(el => { const t = (el.textContent || '').trim(); if (t.length > best.length) best = t; });
+            if (best.length > 30) return { text: best.substring(0, 5000), platform: 'xhs' };
+            return { text: '', platform: 'xhs' };
+          }
+          if (host.includes('youtube.com')) {
+            const el = document.querySelector('#description-inline-expander [slot="content"], #description [slot="content"]');
+            return { text: (el?.textContent || '').trim().substring(0, 3000), platform: 'youtube' };
+          }
+          return { text: (document.querySelector('meta[name="description"]')?.content || '').substring(0, 500), platform: 'web' };
+        },
+      });
+      if (r?.[0]?.result) {
+        domText = r[0].result.text || domText;
+        domPlatform = r[0].result.platform || domPlatform;
+      }
+    } catch(e) { console.warn('text extract:', e.message); }
+  }
+
   // 合并数据
   const title = apiData?.title || pageInfo?.title || t.title || '(无标题)';
   const author = apiData?.author?.nickname || pageInfo?.author || '';
-  const text = (apiData?.desc || pageInfo?.text || '').substring(0, 5000);
-  const platform = pageInfo?.platform === 'xhs' ? '小红书' : pageInfo?.platform === 'youtube' ? 'YouTube' : '网页';
+  const text = (apiData?.desc || domText || pageInfo?.text || '').substring(0, 5000);
+  const platform = domPlatform === 'xhs' ? '小红书' : domPlatform === 'youtube' ? 'YouTube' : '网页';
   let sourceUrl = t.url || pageInfo?.url || '';
   if (!sourceUrl && apiData?.note_id) sourceUrl = `https://www.xiaohongshu.com/explore/${apiData.note_id}`;
 
