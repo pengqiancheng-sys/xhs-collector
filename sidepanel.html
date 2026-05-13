@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>前程智囊团 · 素材采集</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <main class="app">
+    <!-- Header -->
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-logo">📦</span>
+        <div>
+          <h1>前程智囊团 · 采集</h1>
+          <div id="server-status" class="status">正在连接飞书...</div>
+        <div id="update-status" class="status idle" style="display:none;margin-top:3px;"></div>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button id="btn-check-update" class="icon-btn" title="检查更新" style="display:none;">🆕</button>
+        <button id="btn-refresh-token" class="icon-btn" title="刷新飞书Token">🔄</button>
+        <button id="btn-refresh" class="icon-btn" title="刷新页面状态">↻</button>
+      </div>
+    </header>
+
+    <!-- 页面识别 -->
+    <section class="section page-recognition">
+      <div id="platform-badge" class="platform-badge">🌐 识别中...</div>
+      <div id="page-title" class="platform-name">打开页面后自动识别</div>
+      <div id="page-meta" class="page-meta"></div>
+      <div id="image-preview" class="preview-img"></div>
+      <div id="api-badge" style="display:none;font-size:10px;color:#51cf66;margin-top:4px;">📡 API 数据已捕获</div>
+    </section>
+
+    <!-- 采集操作 -->
+    <section class="section capture-panel" id="capture-panel">
+      <div class="capture-label">快捷采集</div>
+      <div class="capture-actions">
+        <button id="btn-save-page" class="btn btn-primary" disabled>
+          📥 采集当前页面
+        </button>
+        <button id="btn-save-xhs" class="btn btn-secondary" disabled>
+          🔴 小红书 API 采集（完整数据）
+        </button>
+      </div>
+      <div id="capture-status" class="capture-status hidden"></div>
+    </section>
+
+    <!-- 博主批量采集 -->
+    <section class="section blogger-panel hidden" id="blogger-panel">
+      <div class="capture-label">博主批量采集</div>
+      <div class="field-row">
+        <div class="field">
+          <label>采集数量</label>
+          <input id="blogger-limit" type="number" value="20" min="1" max="100" step="1">
+        </div>
+        <div class="field">
+          <label>间隔(秒)</label>
+          <input id="blogger-interval" type="number" value="2" min="1" max="10" step="0.5">
+        </div>
+      </div>
+      <button id="btn-blogger-start" class="btn btn-primary">
+        🚀 开始批量采集博主笔记
+      </button>
+      <div id="blogger-progress" class="progress-bar hidden">
+        <div class="progress-top">
+          <span id="blogger-progress-label">准备中...</span>
+          <span id="blogger-progress-percent">0%</span>
+        </div>
+        <div class="progress-track">
+          <div id="blogger-progress-fill" class="progress-fill" style="width:0%"></div>
+        </div>
+        <div id="blogger-progress-meta" style="font-size:10px;color:#868e96;margin-top:4px;"></div>
+      </div>
+    </section>
+
+    <!-- 任务队列 -->
+    <section class="section">
+      <div class="capture-label">任务队列</div>
+      <div id="task-current" class="task-current">空闲</div>
+      <div id="task-queue-list"></div>
+    </section>
+
+    <!-- 执行日志 -->
+    <section class="section">
+      <div class="capture-label">执行日志</div>
+      <div id="log-list" class="log-list">
+        <div class="log-empty">等待首次采集...</div>
+      </div>
+    </section>
+  </main>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
