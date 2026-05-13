@@ -86,18 +86,49 @@ async function captureCurrentTab(tab) {
       if (results?.[0]?.result) apiData = results[0].result;
     } catch(e) { console.warn('API data fetch:', e.message); }
 
+    // 2.5 专用图片抓取 - 直接在页面上遍历所有 img/背景图
+    let domImages = [];
+    try {
+      const imgResults = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => {
+          const urls = new Set();
+          // 遍历所有 img 标签
+          document.querySelectorAll('img').forEach(img => {
+            const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-original') || '';
+            if (src && src.startsWith('http')) urls.add(src);
+          });
+          // 小红书特有的 swiper 轮播图
+          document.querySelectorAll('.swiper-slide, [class*="slide"]').forEach(slide => {
+            const bg = getComputedStyle(slide).backgroundImage;
+            const match = bg && bg.match(/url\("(.+)"\)/);
+            if (match && match[1]) urls.add(match[1]);
+            slide.querySelectorAll('img').forEach(img => {
+              if (img.src && img.src.startsWith('http')) urls.add(img.src);
+            });
+          });
+          // 也抓 og:image
+          const og = document.querySelector('meta[property="og:image"]');
+          if (og && og.content && og.content.startsWith('http')) urls.add(og.content);
+          return Array.from(urls);
+        },
+      });
+      if (imgResults?.[0]?.result) domImages = imgResults[0].result;
+    } catch(e) { console.warn('Image fetch:', e.message); }
+
     // 3. 合并数据
     const title = apiData?.title || pageInfo?.title || tab.title || '(无标题)';
     const author = apiData?.author?.nickname || pageInfo?.author || '';
     const text = (apiData?.desc || pageInfo?.text || '').substring(0, 5000);
-    const images = apiData?.images?.length ? apiData.images : (pageInfo?.images || []);
+    // 图片: API数据优先 > 专用图片抓取 > pageInfo DOM
+    const images = apiData?.images?.length ? apiData.images : (domImages.length ? domImages : (pageInfo?.images || []));
     const noteId = apiData?.note_id || '';
     const platformMap = { xhs: '小红书', youtube: 'YouTube', web: '网页' };
     const platform = platformMap[pageInfo?.platform] || '其他';
     let sourceUrl = tab.url || pageInfo?.url || '';
     if (!sourceUrl && noteId) sourceUrl = `https://www.xiaohongshu.com/explore/${noteId}`;
 
-    console.log('📥 采集数据:', { title, author, platform, textLen: text.length, images: images.length });
+    console.log('📥 采集数据:', { title: title.substring(0,40), author, platform, textLen: text.length, apiImages: apiData?.images?.length||0, domImages: domImages.length, pageImages: pageInfo?.images?.length||0, finalImages: images.length });
     console.log('📸 图片URLs:', images.slice(0, 5));
 
     // 4. 上传图片

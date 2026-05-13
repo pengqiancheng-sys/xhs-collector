@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "前程智囊团 · 素材采集",
-  "version": "2.3.1",
+  "version": "2.3.2",
   "description": "采集文本+图片同步飞书附件。Side Panel侧边栏常驻，小红书API拦截，博主批量采集。",
   "permissions": [
     "activeTab",
