@@ -104,33 +104,31 @@
       if (longest) data.text = longest;
     }
 
-    // 图片 - 取所有笔记图片
+    // 图片 - 宽松匹配，抓取所有可能的笔记图片
     const seen = new Set();
-    const imgSelectors = [
-      '.swiper-slide img', '[class*="note-image"] img', '[class*="img-container"] img',
-      '.note-scroller img', '[class*="carousel"] img', '.feed-card img',
-      '.media-preview img', '[class*="media"] img',
-      'meta[property="og:image"]',
-    ];
-    imgSelectors.forEach(sel => {
-      document.querySelectorAll(sel).forEach(el => {
-        const src = el.src || el.content || el.dataset.src || el.dataset.original || '';
-        if (!src || !src.startsWith('http')) return;
-        // 排除头像、图标等
-        if (src.includes('avatar') || src.includes('icon') || src.includes('logo')) return;
-        // 排除过小图片
-        if (!seen.has(src) && data.images.length < 12) {
-          seen.add(src);
-          data.images.push(src);
-        }
-      });
+    // 优先：从 xhs-bridge 的 API 数据中获取（MAIN 世界不可访问，这里用 DOM 兜底）
+    // DOM 全面抓取
+    document.querySelectorAll('img').forEach(el => {
+      const src = el.src || el.dataset.src || el.dataset.original || el.getAttribute('data-src') || '';
+      if (!src || !src.startsWith('http')) return;
+      // 过滤掉纯图标、表情、头像（太小的一般是UI元素）
+      const w = el.naturalWidth || el.width || 0;
+      const h = el.naturalHeight || el.height || 0;
+      if (w > 0 && h > 0 && (w < 50 || h < 50)) return;  // 过小跳过
+      if (src.includes('emoji') || src.includes('favicon')) return;
+      if (!seen.has(src) && data.images.length < 12) {
+        seen.add(src);
+        data.images.push(src);
+      }
     });
+    // 也检查 og:image
+    const ogImg = document.querySelector('meta[property="og:image"]');
+    if (ogImg && ogImg.content && ogImg.content.startsWith('http') && !seen.has(ogImg.content)) {
+      data.images.push(ogImg.content);
+    }
 
-    // 去重 + 优先取高清
-    data.images = [...new Set(data.images)].map(url => {
-      // 小红书图片URL通常可去水印
-      return url.replace(/\/\w+\?imageView2.*$/, '').replace(/\?.*$/, '');
-    });
+    // 去重
+    data.images = [...new Set(data.images)];
 
     return data;
   }

@@ -98,10 +98,12 @@ async function captureCurrentTab(tab) {
     if (!sourceUrl && noteId) sourceUrl = `https://www.xiaohongshu.com/explore/${noteId}`;
 
     console.log('📥 采集数据:', { title, author, platform, textLen: text.length, images: images.length });
+    console.log('📸 图片URLs:', images.slice(0, 5));
 
     // 4. 上传图片
     let fileTokens = [];
     const maxImg = Math.min(images.length, 9);
+    console.log(`📸 开始上传 ${maxImg} 张图片...`);
     for (let i = 0; i < maxImg; i++) {
       try {
         const ft = await uploadImage(images[i], i);
