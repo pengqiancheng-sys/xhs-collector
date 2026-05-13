@@ -174,8 +174,7 @@ async function captureCurrentTab(tab) {
       '优先级': '中',
     };
     if (sourceUrl) fields['来源链接'] = { link: sourceUrl, text: title.substring(0, 50) };
-    // 图片URL写入文本字段（飞书drive upload API 1061002 params error 暂不可用）
-    if (imageUrls) fields['图片链接（临时）'] = imageUrls;
+    if (fileTokens.length) fields['素材图片'] = fileTokens;
 
     // 6. 写入飞书
     const token = await getToken();
@@ -223,31 +222,58 @@ async function captureCurrentTab(tab) {
   }
 }
 
-// ====== 图片上传 ======
+// ====== 图片上传（分片上传法：upload_prepare + upload_part + upload_finish）
 async function uploadImage(url, index) {
-  // 1. 下载
+  // 1. 下载图片
   const imgResp = await fetch(url, { signal: AbortSignal.timeout(20000) });
   if (!imgResp.ok) throw new Error(`下载 ${imgResp.status}`);
   const blob = await imgResp.blob();
   if (blob.size > 20 * 1024 * 1024) throw new Error('图片过大');
+  console.log(`📸 图片${index}: ${blob.size} bytes, type=${blob.type}`);
 
-  // 2. 上传飞书
+  // 2. 预上传
   const token = await getToken();
-  const form = new FormData();
-  form.append('file', blob, `img_${index}.jpg`);
-  form.append('parent_type', 'bitable_file');
-  form.append('parent_node', APP_TOKEN);
-  form.append('size', String(blob.size));
+  const prepResp = await fetch(`${FEISHU_DRIVE}/medias/upload_prepare`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      file_name: `img_${index}.jpg`,
+      parent_type: 'bitable_file',
+      parent_node: APP_TOKEN,
+      size: blob.size,
+    }),
+  });
+  const prep = await prepResp.json();
+  if (prep.code !== 0) throw new Error(`预上传: ${prep.msg}`);
+  const uploadId = prep.data.upload_id;
 
-  const upResp = await fetch(`${FEISHU_DRIVE}/medias/upload_all`, {
+  // 3. 上传分片
+  const partForm = new FormData();
+  partForm.append('upload_id', uploadId);
+  partForm.append('seq', '0');
+  partForm.append('size', String(blob.size));
+  partForm.append('file', blob, `img_${index}.jpg`);
+
+  const partResp = await fetch(`${FEISHU_DRIVE}/medias/upload_part`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}` },
-    body: form,
+    body: partForm,
   });
+  const part = await partResp.json();
+  if (part.code !== 0) throw new Error(`上传分片: ${part.msg}`);
 
-  const upData = await upResp.json();
-  if (upData.code !== 0) throw new Error(upData.msg || '上传失败');
-  return upData.data?.file_token || null;
+  // 4. 完成上传
+  const finishResp = await fetch(`${FEISHU_DRIVE}/medias/upload_finish`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ upload_id: uploadId, block_num: 1 }),
+  });
+  const finish = await finishResp.json();
+  if (finish.code !== 0) throw new Error(`完成上传: ${finish.msg}`);
+
+  const fileToken = finish.data?.file_token;
+  console.log(`📸 图片${index} 上传成功: ${fileToken}`);
+  return fileToken;
 }
 
 // ====== 简单采集 ======
@@ -330,8 +356,7 @@ async function collectBloggerNotes(tabId, limit, intervalMs) {
         '优先级': '中',
       };
       if (n.note_id) fields['来源链接'] = { link: `https://www.xiaohongshu.com/explore/${n.note_id}`, text: n.title };
-      // 图片URL写入文本字段（飞书drive upload API 1061002 params error 暂不可用）
-    if (imageUrls) fields['图片链接（临时）'] = imageUrls;
+      if (fileTokens.length) fields['素材图片'] = fileTokens;
 
       const token = await getToken();
       await fetch(`${FEISHU_BASE}/apps/${APP_TOKEN}/tables/${TABLE_ID}/records`, {
