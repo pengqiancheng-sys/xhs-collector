@@ -207,7 +207,7 @@ async function captureCurrentTab(tab) {
         type: 'capture:result',
         success: true,
         title: title.substring(0, 40),
-        images: fileTokens.length,
+        images: images.length,
       }).catch(() => {});
     } else {
       const err = await resp.json().catch(() => ({}));
@@ -315,9 +315,9 @@ async function collectBloggerNotes(tabId, limit, intervalMs) {
   for (let i = 0; i < notes.length; i++) {
     const n = notes[i];
     try {
-      let fileTokens = [];
+      let imgUrls = '';
       if (n.images?.length) {
-        try { const ft = await uploadImage(n.images[0], i); if (ft) fileTokens.push({ file_token: ft }); } catch {}
+        imgUrls = n.images.slice(0, 3).join('\n');
       }
 
       const fields = {
