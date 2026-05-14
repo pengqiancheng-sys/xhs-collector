@@ -67,7 +67,7 @@ let config = { ...DEFAULT_CONFIG };
   chrome.storage.onChanged.addListener(onStorageChange);
   setInterval(processQueue, 1000);
   initUpdate();
-  console.log('🚀 前程智囊团 v4.0.12 可配置版');
+  console.log('🚀 前程智囊团 v4.0.13 可配置版');
 })();
 
 async function loadConfig() {
@@ -559,13 +559,13 @@ async function capturePage(t) {
           }
           return tags;
         }
-        // 互动：RedBox 同款 getStats
+        // 互动：RedBox 同款 getStats + 排除评论区的加强版
         const likeEl = Array.from(document.querySelectorAll('.like-wrapper .count,[class*="like-wrapper"] .count,[class*="like"] .count'))
-          .find(el => !el.closest('[class*="comment"]'));
+          .find(el => !el.closest('[class*="comment"]') && !el.closest('.comments-el') && !el.closest('.comment-container') && !el.closest('.comment-list') && !el.closest('.comment-item'));
         const collectEl = Array.from(document.querySelectorAll('.collect-wrapper .count,[class*="collect-wrapper"] .count,[class*="collect"] .count'))
-          .find(el => !el.closest('[class*="comment"]'));
+          .find(el => !el.closest('[class*="comment"]') && !el.closest('.comments-el') && !el.closest('.comment-container') && !el.closest('.comment-list') && !el.closest('.comment-item'));
         const commentEl = Array.from(document.querySelectorAll('.chat-wrapper .count,.comment-wrapper .count,[class*="comment"] .count'))
-          .find(el => !el.closest('.comments-el'));
+          .find(el => !el.closest('.comments-el') && !el.closest('.comment-list') && !el.closest('.comment-item'));
         // 正文：取页面全部可见笔记正文
         let domText = '';
         const textEls = document.querySelectorAll('#detail-desc .note-text, .desc .note-text, .note-content .note-text');
@@ -929,13 +929,13 @@ function handleMessage(msg, sender, sendResponse) {
           }
           return tags;
         }
-        // 互动：RedBox 同款 getStats
+        // 互动：RedBox 同款 getStats + 排除评论区的加强版
         const likeEl = Array.from(document.querySelectorAll('.like-wrapper .count,[class*="like-wrapper"] .count,[class*="like"] .count'))
-          .find(el => !el.closest('[class*="comment"]'));
+          .find(el => !el.closest('[class*="comment"]') && !el.closest('.comments-el') && !el.closest('.comment-container') && !el.closest('.comment-list') && !el.closest('.comment-item'));
         const collectEl = Array.from(document.querySelectorAll('.collect-wrapper .count,[class*="collect-wrapper"] .count,[class*="collect"] .count'))
-          .find(el => !el.closest('[class*="comment"]'));
+          .find(el => !el.closest('[class*="comment"]') && !el.closest('.comments-el') && !el.closest('.comment-container') && !el.closest('.comment-list') && !el.closest('.comment-item'));
         const commentEl = Array.from(document.querySelectorAll('.chat-wrapper .count,.comment-wrapper .count,[class*="comment"] .count'))
-          .find(el => !el.closest('.comments-el'));
+          .find(el => !el.closest('.comments-el') && !el.closest('.comment-list') && !el.closest('.comment-item'));
         // 正文：取页面全部可见笔记正文
         let domText = '';
         const textEls = document.querySelectorAll('#detail-desc .note-text, .desc .note-text, .note-content .note-text');
