@@ -67,7 +67,7 @@ let config = { ...DEFAULT_CONFIG };
   chrome.storage.onChanged.addListener(onStorageChange);
   setInterval(processQueue, 1000);
   initUpdate();
-  console.log('🚀 前程智囊团 v4.0.11 可配置版');
+  console.log('🚀 前程智囊团 v4.0.12 可配置版');
 })();
 
 async function loadConfig() {
@@ -509,8 +509,8 @@ async function capturePage(t) {
 
   // 获取页面信息
   let pageInfo = {};
-  // 直接从 DOM 获取互动数据（RedBox 方式，最稳定）
-  let domStats = {};
+  // 直接从 DOM 获取完整数据（RedBox 同款方式：作者/互动/时间/标签）
+  let domData = {};
   try {
     const r = await chrome.scripting.executeScript({
       target: { tabId: t.tabId },
@@ -540,13 +540,44 @@ async function capturePage(t) {
           }
           return 0;
         }
+        // RedBox 同款作者选择器
+        function getAuthor() {
+          for (const sel of ['.author .username', '.author-wrapper .username', '.username']) {
+            const el = document.querySelector(sel);
+            if (el) { const t = (el.innerText || el.textContent || '').trim(); if (t) return t; }
+          }
+          return '';
+        }
+        // 从正文文本中提取 #标签（RedBox 同款 extractTagsFromText）
+        function extractTags(text) {
+          const tags = [];
+          const seen = new Set();
+          const tokens = String(text || '').split('#').slice(1);
+          for (const token of tokens) {
+            const candidate = token.split(/\r?\n/, 1)[0].split(/\s+/, 1)[0].replace(/^[#]+|[，,。.！!？?【】 ]+$/g, '').trim();
+            if (candidate && !seen.has(candidate)) { seen.add(candidate); tags.push('#' + candidate); }
+          }
+          return tags;
+        }
+        // 互动：RedBox 同款 getStats
         const likeEl = Array.from(document.querySelectorAll('.like-wrapper .count,[class*="like-wrapper"] .count,[class*="like"] .count'))
           .find(el => !el.closest('[class*="comment"]'));
         const collectEl = Array.from(document.querySelectorAll('.collect-wrapper .count,[class*="collect-wrapper"] .count,[class*="collect"] .count'))
           .find(el => !el.closest('[class*="comment"]'));
         const commentEl = Array.from(document.querySelectorAll('.chat-wrapper .count,.comment-wrapper .count,[class*="comment"] .count'))
           .find(el => !el.closest('.comments-el'));
+        // 正文：取页面全部可见笔记正文
+        let domText = '';
+        const textEls = document.querySelectorAll('#detail-desc .note-text, .desc .note-text, .note-content .note-text');
+        if (textEls.length) domText = Array.from(textEls).map(el => (el.innerText || el.textContent || '').trim()).filter(Boolean).join('\n\n');
+        if (!domText) {
+          const meta = document.querySelector('meta[property="og:description"]');
+          if (meta) domText = (meta.getAttribute('content') || '').trim();
+        }
         return {
+          author: getAuthor(),
+          text: domText,
+          tags: extractTags(domText),
           likes: parseCount(likeEl?.textContent || ''),
           collects: parseCount(collectEl?.textContent || ''),
           comments: parseCount(commentEl?.textContent || ''),
@@ -554,7 +585,7 @@ async function capturePage(t) {
         };
       },
     });
-    if (r?.[0]?.result) domStats = r[0].result;
+    if (r?.[0]?.result) domData = r[0].result;
   } catch(e) {}
 
   if (features.domParse !== false) {
@@ -661,8 +692,8 @@ async function capturePage(t) {
 
   // 合并数据
   const title = apiData?.title || pageInfo?.title || t.title || '(无标题)';
-  const author = apiData?.author?.nickname || pageInfo?.author || '';
-  const text = (apiData?.desc || domText || pageInfo?.text || '').substring(0, 5000);
+  const author = domData.author || apiData?.author?.nickname || pageInfo?.author || '';
+  const text = (domData.text || apiData?.desc || domText || pageInfo?.text || '').substring(0, 5000);
   const platform = domPlatform === 'xhs' ? '小红书' : domPlatform === 'youtube' ? 'YouTube' : '网页';
   let sourceUrl = t.url || pageInfo?.url || '';
   if (!sourceUrl && apiData?.note_id) sourceUrl = `https://www.xiaohongshu.com/explore/${apiData.note_id}`;
@@ -691,11 +722,11 @@ async function capturePage(t) {
     sourceUrl: sourceUrl || '',
     sourceType: '浏览器采集',
     images: fileTokens.length ? fileTokens : undefined,
-    tags: (apiData?.tags?.length ? apiData.tags : pageInfo?.tags || []).map(t => { const v = String(t || '').trim().replace(/^#+/, ''); return v ? `#${v}` : ''; }).filter(Boolean),
-    publishTime: domStats.time || apiData?.publish_time || pageInfo?.publishTime || 0,
-    interactionLikes: domStats.likes || (apiData?.interaction?.liked_count ?? pageInfo?.likes ?? 0),
-    interactionCollects: domStats.collects || (apiData?.interaction?.collected_count ?? pageInfo?.collects ?? 0),
-    interactionComments: domStats.comments || (apiData?.interaction?.comment_count ?? pageInfo?.comments ?? 0),
+    tags: (() => { const dom = domData.tags || []; const api = (apiData?.tags?.length ? apiData.tags : pageInfo?.tags || []).map(t => { const v = String(t || '').trim().replace(/^#+/, ''); return v ? '#' + v : ''; }).filter(Boolean); const all = [...dom, ...api]; return [...new Set(all)].filter(Boolean); })(),
+    publishTime: domData.time || apiData?.publish_time || pageInfo?.publishTime || 0,
+    interactionLikes: domData.likes || (apiData?.interaction?.liked_count ?? pageInfo?.likes ?? 0),
+    interactionCollects: domData.collects || (apiData?.interaction?.collected_count ?? pageInfo?.collects ?? 0),
+    interactionComments: domData.comments || (apiData?.interaction?.comment_count ?? pageInfo?.comments ?? 0),
   };
   addLog('mapping', `📊 点赞${captureData.interactionLikes} 收藏${captureData.interactionCollects} 评论${captureData.interactionComments}`, 'info');
 
@@ -848,8 +879,8 @@ function handleMessage(msg, sender, sendResponse) {
       case 'sidepanel:get-context': {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         let pageInfo = {};
-  // 直接从 DOM 获取互动数据（RedBox 方式，最稳定）
-  let domStats = {};
+  // 直接从 DOM 获取完整数据（RedBox 同款方式：作者/互动/时间/标签）
+  let domData = {};
   try {
     const r = await chrome.scripting.executeScript({
       target: { tabId: t.tabId },
@@ -879,13 +910,44 @@ function handleMessage(msg, sender, sendResponse) {
           }
           return 0;
         }
+        // RedBox 同款作者选择器
+        function getAuthor() {
+          for (const sel of ['.author .username', '.author-wrapper .username', '.username']) {
+            const el = document.querySelector(sel);
+            if (el) { const t = (el.innerText || el.textContent || '').trim(); if (t) return t; }
+          }
+          return '';
+        }
+        // 从正文文本中提取 #标签（RedBox 同款 extractTagsFromText）
+        function extractTags(text) {
+          const tags = [];
+          const seen = new Set();
+          const tokens = String(text || '').split('#').slice(1);
+          for (const token of tokens) {
+            const candidate = token.split(/\r?\n/, 1)[0].split(/\s+/, 1)[0].replace(/^[#]+|[，,。.！!？?【】 ]+$/g, '').trim();
+            if (candidate && !seen.has(candidate)) { seen.add(candidate); tags.push('#' + candidate); }
+          }
+          return tags;
+        }
+        // 互动：RedBox 同款 getStats
         const likeEl = Array.from(document.querySelectorAll('.like-wrapper .count,[class*="like-wrapper"] .count,[class*="like"] .count'))
           .find(el => !el.closest('[class*="comment"]'));
         const collectEl = Array.from(document.querySelectorAll('.collect-wrapper .count,[class*="collect-wrapper"] .count,[class*="collect"] .count'))
           .find(el => !el.closest('[class*="comment"]'));
         const commentEl = Array.from(document.querySelectorAll('.chat-wrapper .count,.comment-wrapper .count,[class*="comment"] .count'))
           .find(el => !el.closest('.comments-el'));
+        // 正文：取页面全部可见笔记正文
+        let domText = '';
+        const textEls = document.querySelectorAll('#detail-desc .note-text, .desc .note-text, .note-content .note-text');
+        if (textEls.length) domText = Array.from(textEls).map(el => (el.innerText || el.textContent || '').trim()).filter(Boolean).join('\n\n');
+        if (!domText) {
+          const meta = document.querySelector('meta[property="og:description"]');
+          if (meta) domText = (meta.getAttribute('content') || '').trim();
+        }
         return {
+          author: getAuthor(),
+          text: domText,
+          tags: extractTags(domText),
           likes: parseCount(likeEl?.textContent || ''),
           collects: parseCount(collectEl?.textContent || ''),
           comments: parseCount(commentEl?.textContent || ''),
@@ -893,7 +955,7 @@ function handleMessage(msg, sender, sendResponse) {
         };
       },
     });
-    if (r?.[0]?.result) domStats = r[0].result;
+    if (r?.[0]?.result) domData = r[0].result;
   } catch(e) {}
 
         if (tab?.id) { try { pageInfo = await chrome.tabs.sendMessage(tab.id, { type: 'extract-page' }); } catch {} }
