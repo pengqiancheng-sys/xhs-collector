@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "前程智囊团 · 素材采集",
-  "version": "3.0.1",
-  "description": "采集文本+图片同步飞书附件。Side Panel侧边栏常驻，小红书API拦截，博主批量采集。",
+  "version": "4.0.0",
+  "description": "可配置飞书多维表格的小红书/YouTube/网页采集插件。支持自定义字段映射、自动表结构探测、多表格切换。",
   "permissions": [
     "activeTab",
     "alarms",
@@ -49,7 +49,10 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "page-bridge.js"
+        "page-bridge.js",
+        "settings.html",
+        "settings.js",
+        "settings.css"
       ],
       "matches": [
         "<all_urls>"
@@ -72,5 +75,6 @@
   "side_panel": {
     "default_path": "sidepanel.html"
   },
+  "options_page": "settings.html",
   "update_url": "https://raw.githubusercontent.com/pengqiancheng-sys/xhs-collector/main/manifest.json"
 }

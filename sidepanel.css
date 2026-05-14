@@ -234,3 +234,21 @@ body {
 .log-entry.success { color: #51cf66; }
 .log-entry.error { color: #ff6b6b; }
 .log-empty { color: #868e96; text-align: center; padding: 16px; }
+
+/* ===== v4.0 配置状态条 ===== */
+.config-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 10px 8px;
+  padding: 7px 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  font-size: 11px;
+  color: #adb5bd;
+}
+.config-hint {
+  font-weight: 600;
+}

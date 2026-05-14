@@ -15,15 +15,22 @@
         <div>
           <h1>前程智囊团 · 采集</h1>
           <div id="server-status" class="status">正在连接飞书...</div>
-        <div id="update-status" class="status idle" style="display:none;margin-top:3px;"></div>
         </div>
       </div>
       <div class="topbar-actions">
+        <button id="btn-settings" class="icon-btn" title="设置">⚙️</button>
         <button id="btn-check-update" class="icon-btn" title="检查更新" style="display:none;">🆕</button>
-        <button id="btn-refresh-token" class="icon-btn" title="刷新飞书Token">🔄</button>
-        <button id="btn-refresh" class="icon-btn" title="刷新页面状态">↻</button>
       </div>
     </header>
+
+    <!-- 配置状态 -->
+    <div id="config-bar" class="config-bar">
+      <span>📋 表: --</span>
+      <span class="config-hint" id="config-hint" style="display:none;color:#ffd43b;">⚠️ 未配置</span>
+    </div>
+
+    <!-- 更新提示 -->
+    <div id="update-status" class="status error" style="display:none;padding:6px 12px;margin:0 10px 6px;background:rgba(255,107,107,0.08);border-radius:6px;"></div>
 
     <!-- 页面识别 -->
     <section class="section page-recognition">

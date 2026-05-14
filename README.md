@@ -1,43 +1,100 @@
 # 前程智囊团 · 浏览器素材采集插件
 
-> 一键采集小红书/YouTube/网页素材，自动同步到飞书多维表格选题管理表。
-> Side Panel 侧边栏常驻，自动更新检测。
+> 一键采集小红书 / YouTube / 网页素材，自动同步到飞书多维表格。
+> v4.0 起支持自定义飞书应用、自定义多维表格、自定义字段映射，可分享给其他公司和团队使用；仓库不内置任何私有 App Secret 或表格 Token。
 
 ## 🚀 功能
 
 | 功能 | 说明 |
 |------|------|
-| 🔴 小红书采集 | API 拦截 + DOM 深度解析，获取完整标题/正文/图片/互动数据 |
-| ▶️ YouTube 采集 | 提取标题/频道/描述/缩略图 |
-| 🌐 网页采集 | 自动提取标题/描述/来源 |
-| 📊 飞书同步 | 文本写入选题管理表，图片上传附件字段 |
+| 🔴 小红书采集 | API 拦截 + DOM 深度解析，获取标题、正文、图片、作者、互动数据 |
+| ▶️ YouTube 采集 | 提取标题、频道、描述、缩略图 |
+| 🌐 网页采集 | 自动提取标题、描述、来源 |
+| 📊 飞书同步 | 文本写入多维表格，图片上传附件字段 |
+| ⚙️ 可视化设置 | 支持配置自己的飞书应用、表格 Token、数据表 ID |
+| 🔗 字段映射 | 采集数据字段可映射到任意多维表格字段 |
+| 📋 表结构探测 | 自动读取目标表字段，减少手动配置错误 |
 | 🚀 博主批量采集 | 在博主主页一键批量采集笔记 |
-| 🆕 自动更新 | 每6小时检查新版本，有新版显示 badge 提示 |
+| 📤 配置导入导出 | 团队可共享字段映射模板；导出时不会包含 App Secret |
+| 🆕 自动更新 | 每 6 小时检查新版本，有新版显示 badge 提示 |
 
 ## 📦 安装
 
-1. 下载最新 [Release](https://github.com/qiancheng/xhs-collector/releases)
+1. 下载最新 Release ZIP
 2. 解压 ZIP
 3. Chrome → `chrome://extensions/` → 右上角开启「开发者模式」
 4. 点击「加载已解压的扩展程序」→ 选择解压后的文件夹
+5. 点击插件右上角 ⚙️ 进入设置页
 
 ## ⚙️ 配置
 
-插件已内置飞书应用凭证，无需手动配置 Token。
-如需更换飞书应用，修改 `background.js` 顶部的：
-- `APP_ID` / `APP_SECRET`（飞书应用凭证）
-- `APP_TOKEN` / `TABLE_ID`（多维表格和表信息）
+### 1. 准备飞书应用
+
+在飞书开放平台创建企业自建应用，开启所需权限：
+
+- 多维表格记录读写
+- 多维表格字段读取
+- 云空间文件/素材上传相关权限
+
+获取：
+
+- `APP_ID`
+- `APP_SECRET`
+
+> 注意：不要把包含 App Secret 的配置文件公开分享。
+
+### 2. 配置目标多维表格
+
+在插件设置页填写：
+
+- App ID
+- App Secret
+- 多维表格 Token（APP_TOKEN）
+- 数据表 ID（TABLE_ID）
+
+然后点击：
+
+1. **自动探测表格字段**
+2. **智能自动匹配**
+3. 检查字段映射
+4. 保存配置
+5. 测试连接
+
+### 3. 字段映射
+
+插件采集到的标准字段：
+
+| 采集字段 | 含义 | 建议表格字段类型 |
+|---|---|---|
+| title | 笔记/网页标题 | 文本 |
+| text | 正文内容 | 多行文本/文本 |
+| author | 作者/来源 | 文本 |
+| platform | 来源平台 | 单选/文本 |
+| sourceUrl | 来源链接 | 超链接 |
+| sourceType | 采集方式 | 单选/文本 |
+| images | 素材图片 | 附件 |
+| tags | 标签 | 文本 |
+| interactionLikes | 点赞数 | 数字 |
+| interactionCollects | 收藏数 | 数字 |
+| interactionComments | 评论数 | 数字 |
 
 ## 🏗️ 技术架构
 
 ```
 浏览器插件 (MV3)
-├── xhs-bridge.js     → 注入 MAIN 世界，拦截 fetch/XHR 获取小红书 API 数据
-├── page-observer.js  → DOM 解析 + 页面类型识别
-├── background.js     → 任务队列 + 飞书 API 通信 + 自动更新
-├── sidepanel.html/js → 侧边栏 UI
-└── page-bridge.js    → MAIN → content script 消息桥接
+├── xhs-bridge.js      → 注入 MAIN 世界，拦截 fetch/XHR 获取小红书 API 数据
+├── page-observer.js   → DOM 解析 + 页面类型识别
+├── background.js      → 任务队列 + 飞书 API 通信 + 字段映射引擎
+├── sidepanel.html/js  → 侧边栏采集 UI
+├── settings.html/js   → 可视化配置页
+└── page-bridge.js     → MAIN → content script 消息桥接
 ```
+
+## 🔐 安全说明
+
+- App Secret 存储在本地 Chrome storage，仅在本机使用。
+- 导出配置时会自动移除 App Secret。
+- 开源仓库不应提交真实 App Secret。
 
 ## 📄 许可
 

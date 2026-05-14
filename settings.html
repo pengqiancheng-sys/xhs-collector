@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>前程智囊团 · 采集设置</title>
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <main class="settings-app">
+    <header class="settings-header">
+      <h1>⚙️ 前程智囊团 · 采集设置</h1>
+      <span class="version" id="version-tag">v4.0.0</span>
+    </header>
+
+    <!-- 标签页导航 -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="feishu">🔑 飞书凭证</button>
+      <button class="tab-btn" data-tab="mapping">🔗 字段映射</button>
+      <button class="tab-btn" data-tab="features">🎛️ 采集设置</button>
+      <button class="tab-btn" data-tab="about">ℹ️ 关于</button>
+    </nav>
+
+    <!-- Tab 1: 飞书凭证 -->
+    <section class="tab-content active" id="tab-feishu">
+      <div class="card">
+        <div class="card-title">飞书应用凭证</div>
+        <p class="card-desc">在飞书开放平台创建应用 → 获取 App ID 和 App Secret → 开启 Bitable 权限</p>
+
+        <div class="form-group">
+          <label>App ID</label>
+          <input type="text" id="cfg-appId" placeholder="cli_a..." spellcheck="false">
+        </div>
+        <div class="form-group">
+          <label>App Secret</label>
+          <div class="secret-wrap">
+            <input type="password" id="cfg-appSecret" placeholder="输入 App Secret" spellcheck="false">
+            <button class="toggle-secret" id="btn-toggle-secret" title="显示/隐藏">👁️</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">目标多维表格</div>
+        <p class="card-desc">输入你要写入的飞书多维表格信息。可从表格 URL 中提取 token</p>
+
+        <div class="form-row">
+          <div class="form-group flex-2">
+            <label>多维表格 Token (APP_TOKEN)</label>
+            <input type="text" id="cfg-appToken" placeholder="从飞书表格 URL 中获取" spellcheck="false">
+          </div>
+          <div class="form-group flex-1">
+            <label>数据表 ID (TABLE_ID)</label>
+            <input type="text" id="cfg-tableId" placeholder="tbl..." spellcheck="false">
+          </div>
+        </div>
+
+        <div class="form-row" style="margin-top:12px;">
+          <div class="form-group flex-1">
+            <label>数据表名称（选填，仅显示用）</label>
+            <input type="text" id="cfg-tableName" placeholder="如：选题管理表" spellcheck="false">
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="btn-fetch-fields">📋 自动探测表格字段</button>
+          <button class="btn btn-secondary" id="btn-test-connection">🔍 测试连接</button>
+        </div>
+        <div id="connection-result" class="connection-result hidden"></div>
+      </div>
+    </section>
+
+    <!-- Tab 2: 字段映射 -->
+    <section class="tab-content" id="tab-mapping">
+      <div class="card">
+        <div class="card-title">采集数据 → 表格字段映射</div>
+        <p class="card-desc">将采集到的每项数据映射到你表格中对应的字段。同名字段会自动匹配。</p>
+        <p class="card-desc" style="color:#ffd43b;margin-top:4px;">💡 先点击「自动探测表格字段」，这里会自动填充你表格的字段列表供选择。</p>
+
+        <div class="mapping-list" id="mapping-list">
+          <!-- 动态生成 -->
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="btn-auto-map">🪄 智能自动匹配</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">默认值（固定写入）</div>
+        <p class="card-desc">每条采集记录都会自动写入这些固定值</p>
+        <div id="defaults-list" class="defaults-list">
+          <!-- 动态生成 -->
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary btn-sm" id="btn-add-default">+ 添加默认值</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 3: 采集设置 -->
+    <section class="tab-content" id="tab-features">
+      <div class="card">
+        <div class="card-title">采集功能开关</div>
+        <div class="toggle-list">
+          <label class="toggle-item">
+            <div>
+              <strong>API 拦截采集</strong>
+              <small>拦截小红书 API 请求，获取最完整的结构化数据</small>
+            </div>
+            <input type="checkbox" id="cfg-apiIntercept" checked>
+          </label>
+          <label class="toggle-item">
+            <div>
+              <strong>DOM 深度解析</strong>
+              <small>从页面 HTML 中提取标题、正文、作者等信息</small>
+            </div>
+            <input type="checkbox" id="cfg-domParse" checked>
+          </label>
+          <label class="toggle-item">
+            <div>
+              <strong>图片上传</strong>
+              <small>自动下载笔记图片并上传到飞书附件字段</small>
+            </div>
+            <input type="checkbox" id="cfg-imageUpload" checked>
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">采集参数</div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>最多上传图片数</label>
+            <input type="number" id="cfg-maxImages" min="1" max="18" value="9">
+          </div>
+          <div class="form-group flex-1">
+            <label>采集间隔（毫秒）</label>
+            <input type="number" id="cfg-collectInterval" min="500" max="10000" value="2500" step="100">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 4: 关于 -->
+    <section class="tab-content" id="tab-about">
+      <div class="card">
+        <div class="card-title">前程智囊团 · 浏览器素材采集插件</div>
+        <p class="card-desc" style="line-height:1.8;">
+          版本：<strong id="about-version">v4.0.0</strong><br>
+          开源地址：<a href="https://github.com/pengqiancheng-sys/xhs-collector" target="_blank">GitHub</a><br>
+          许可证：MIT<br><br>
+          一键采集小红书 / YouTube / 网页素材，自动同步到飞书多维表格。<br>
+          支持自定义飞书应用、表格、字段映射，适用于任何团队的工作流。
+        </p>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-danger btn-sm" id="btn-reset-config">🔄 重置所有配置</button>
+          <button class="btn btn-secondary btn-sm" id="btn-export-config">📤 导出配置</button>
+          <button class="btn btn-secondary btn-sm" id="btn-import-config">📥 导入配置</button>
+          <input type="file" id="import-file" accept=".json" style="display:none;">
+        </div>
+      </div>
+    </section>
+
+    <!-- 底部操作 -->
+    <footer class="settings-footer">
+      <span id="save-status" class="save-status">已加载配置</span>
+      <button class="btn btn-primary" id="btn-save-all" style="width:auto;padding:10px 28px;">💾 保存配置</button>
+    </footer>
+  </main>
+
+  <script src="settings.js"></script>
+</body>
+</html>

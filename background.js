@@ -1,12 +1,48 @@
-// 前程智囊团 v3.0 — 对标 RedBox 任务队列架构
-const FEISHU_BASE = 'https://open.feishu.cn/open-apis/bitable/v1';
-const FEISHU_DRIVE = 'https://open.feishu.cn/open-apis/drive/v1';
+// 前程智囊团 v4.0 — 可配置化架构
+// 所有飞书凭证、表信息、字段映射 均从 chrome.storage 动态读取
+
 const FEISHU_AUTH = 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal';
-const APP_TOKEN = 'NyOtb2ybzav3e8s7bmlcWfg8nmb';
-const TABLE_ID = 'tblK9xb6LcoWyt2H';
-const APP_ID = 'cli_a9029657efb81bc7';
-const APP_SECRET = 'EHBfRWQsU5VHFjIBK8i2XcDTBGlajmZW';
 const UPDATE_URL = 'https://raw.githubusercontent.com/pengqiancheng-sys/xhs-collector/main/manifest.json';
+
+// ====== 默认配置（前程智囊团内置，可被用户覆盖） ======
+const DEFAULT_CONFIG = {
+  appId: '',
+  appSecret: '',
+  appToken: '',
+  tableId: '',
+  tableName: '',
+  // 字段映射: 采集数据的 key → 表格字段名
+  fieldMapping: {
+    title: '选题标题',
+    text: '多行文本',
+    author: '作者/来源',
+    platform: '来源平台',
+    sourceUrl: '来源链接',
+    sourceType: '选题来源',
+    images: '素材图片',
+    tags: '标签',
+    interactionLikes: '点赞数',
+    interactionCollects: '收藏数',
+    interactionComments: '评论数',
+  },
+  // 固定值（每条记录都会写入）
+  defaults: {
+    '状态': '待选题',
+    '优先级': '中',
+    '选题来源': '浏览器采集',
+  },
+  // 表格字段列表（自动探测填充，用于设置页展示）
+  tableFields: [],
+  // 功能开关
+  features: {
+    apiIntercept: true,
+    domParse: true,
+    imageUpload: true,
+    maxImages: 9,
+  },
+  // 采集间隔（毫秒）
+  collectIntervalMs: 2500,
+};
 
 // 状态
 let accessToken = null, tokenExpiresAt = 0;
@@ -16,19 +52,62 @@ let activeTask = null;
 let lastTask = null;
 const taskLogs = [];
 const MAX_LOGS = 100;
-const COLLECT_INTERVAL_MS = 2500;
+let config = { ...DEFAULT_CONFIG };
 
 // ====== 初始化 ======
 (async () => {
+  await loadConfig();
   if (chrome.sidePanel?.setPanelBehavior) {
     chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
   }
   setupMenus();
   chrome.runtime.onMessage.addListener(handleMessage);
+  chrome.storage.onChanged.addListener(onStorageChange);
   setInterval(processQueue, 1000);
   initUpdate();
-  console.log('🚀 前程智囊团 v3.0');
+  console.log('🚀 前程智囊团 v4.0 可配置版');
 })();
+
+async function loadConfig() {
+  try {
+    const stored = await chrome.storage.local.get(['qcConfig', 'qcInit']);
+    if (stored.qcConfig) {
+      config = { ...DEFAULT_CONFIG, ...stored.qcConfig };
+      // 深度合并 fieldMapping 和 defaults
+      if (stored.qcConfig.fieldMapping) {
+        config.fieldMapping = { ...DEFAULT_CONFIG.fieldMapping, ...stored.qcConfig.fieldMapping };
+      }
+      if (stored.qcConfig.defaults) {
+        config.defaults = { ...DEFAULT_CONFIG.defaults, ...stored.qcConfig.defaults };
+      }
+      if (stored.qcConfig.features) {
+        config.features = { ...DEFAULT_CONFIG.features, ...stored.qcConfig.features };
+      }
+    }
+    if (!stored.qcInit) {
+      // 首次安装，保存默认配置
+      await saveConfig(config);
+      await chrome.storage.local.set({ qcInit: true });
+    }
+  } catch (e) {
+    console.warn('loadConfig:', e.message);
+  }
+}
+
+async function saveConfig(cfg) {
+  config = cfg;
+  await chrome.storage.local.set({ qcConfig: config });
+}
+
+function onStorageChange(changes, area) {
+  if (area === 'local' && changes.qcConfig) {
+    config = { ...DEFAULT_CONFIG, ...changes.qcConfig.newValue };
+    // 重置 token，因为凭证可能变了
+    accessToken = null;
+    tokenExpiresAt = 0;
+    console.log('⚙️ 配置已热更新');
+  }
+}
 
 function setupMenus() {
   chrome.contextMenus.removeAll(() => {
@@ -45,45 +124,151 @@ function setupMenus() {
 
 // ====== Token ======
 async function getToken() {
+  if (!config.appId || !config.appSecret) throw new Error('请先配置飞书应用凭证（设置页）');
   if (accessToken && Date.now() < tokenExpiresAt - 600000) return accessToken;
   const r = await fetch(FEISHU_AUTH, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ app_id: APP_ID, app_secret: APP_SECRET }),
+    body: JSON.stringify({ app_id: config.appId, app_secret: config.appSecret }),
   });
   const d = await r.json();
-  if (d.code !== 0) throw new Error(d.msg);
+  if (d.code !== 0) throw new Error(d.msg || 'Token获取失败');
   accessToken = d.tenant_access_token;
   tokenExpiresAt = Date.now() + d.expire * 1000;
   return accessToken;
 }
 
-// ====== 飞书 API ======
-async function feishuWrite(fields) {
+// ====== 飞书 API 代理 ======
+async function feishuRequest(path, options = {}) {
   const token = await getToken();
-  const r = await fetch(`${FEISHU_BASE}/apps/${APP_TOKEN}/tables/${TABLE_ID}/records`, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields }),
+  const url = `https://open.feishu.cn/open-apis/${path}`;
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
   });
-  if (!r.ok) {
-    const e = await r.json().catch(() => ({}));
-    if (r.status === 401 || e.code === 99991663) {
-      accessToken = null; tokenExpiresAt = 0;
-      const newToken = await getToken();
-      const retry = await fetch(`${FEISHU_BASE}/apps/${APP_TOKEN}/tables/${TABLE_ID}/records`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${newToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields }),
-      });
-      if (!retry.ok) throw new Error((await retry.json().catch(() => ({}))).msg || 'write fail');
-      return retry.json();
-    }
-    throw new Error(e.msg || `HTTP ${r.status}`);
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401 || data.code === 99991663) {
+    accessToken = null; tokenExpiresAt = 0;
+    const newToken = await getToken();
+    const retry = await fetch(url, {
+      ...options,
+      headers: {
+        'Authorization': `Bearer ${newToken}`,
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+    });
+    return retry.json();
   }
-  return r.json();
+  if (!res.ok || (data.code && data.code !== 0)) {
+    throw new Error(data.msg || `HTTP ${res.status}`);
+  }
+  return data;
 }
 
-// ====== 图片上传(分片法) ======
+// ====== 获取表字段列表（设置页用） ======
+async function fetchTableFields(appToken, tableId, appId, appSecret) {
+  // 使用临时凭证
+  const savedAppId = config.appId;
+  const savedSecret = config.appSecret;
+  config.appId = appId || savedAppId;
+  config.appSecret = appSecret || savedSecret;
+  accessToken = null; tokenExpiresAt = 0;
+
+  try {
+    const data = await feishuRequest(
+      `bitable/v1/apps/${appToken}/tables/${tableId}/fields`,
+      { method: 'GET' }
+    );
+    const fields = (data.data?.items || []).map(f => ({
+      id: f.field_id,
+      name: f.field_name,
+      type: f.type, // 1=文本,2=数字,3=单选,4=多选,5=日期,7=复选框,11=人员,15=超链接,17=附件
+      typeName: FIELD_TYPE_NAMES[f.type] || `类型${f.type}`,
+    }));
+    return { success: true, fields };
+  } catch (e) {
+    return { success: false, error: e.message };
+  } finally {
+    config.appId = savedAppId;
+    config.appSecret = savedSecret;
+    accessToken = null; tokenExpiresAt = 0;
+  }
+}
+
+const FIELD_TYPE_NAMES = {
+  1: '文本', 2: '数字', 3: '单选', 4: '多选', 5: '日期',
+  7: '复选框', 11: '人员', 13: '电话', 15: '超链接', 17: '附件',
+  1001: '创建时间', 1002: '修改时间',
+};
+
+// ====== 飞书写入（带字段映射） ======
+async function feishuWrite(captureData) {
+  const fields = {};
+  const fm = config.fieldMapping || DEFAULT_CONFIG.fieldMapping;
+  const defs = config.defaults || DEFAULT_CONFIG.defaults;
+
+  // 应用固定值
+  for (const [key, val] of Object.entries(defs)) {
+    fields[key] = val;
+  }
+
+  // 应用字段映射
+  for (const [dataKey, fieldName] of Object.entries(fm)) {
+    if (!fieldName) continue;
+    const value = captureData[dataKey];
+    if (value === undefined || value === null || value === '') continue;
+
+    switch (dataKey) {
+      case 'title':
+      case 'text':
+      case 'author':
+      case 'platform':
+        fields[fieldName] = String(value).substring(0, dataKey === 'text' ? 15000 : 5000);
+        break;
+      case 'sourceUrl':
+        fields[fieldName] = { link: String(value), text: (captureData.title || captureData.text || '').substring(0, 50) };
+        break;
+      case 'sourceType':
+        fields[fieldName] = String(value);
+        break;
+      case 'images':
+        if (Array.isArray(value) && value.length) {
+          fields[fieldName] = value;
+        }
+        break;
+      case 'tags':
+        if (Array.isArray(value) && value.length) {
+          fields[fieldName] = value.join(', ');
+        }
+        break;
+      case 'interactionLikes':
+      case 'interactionCollects':
+      case 'interactionComments':
+        fields[fieldName] = Number(value) || 0;
+        break;
+      default:
+        fields[fieldName] = String(value);
+    }
+  }
+
+  // 确保标题至少有一个值
+  const titleField = fm.title || '选题标题';
+  if (!fields[titleField] && captureData.title) {
+    fields[titleField] = String(captureData.title).substring(0, 5000);
+  }
+
+  const data = await feishuRequest(
+    `bitable/v1/apps/${config.appToken}/tables/${config.tableId}/records`,
+    { method: 'POST', body: JSON.stringify({ fields }) }
+  );
+  return data;
+}
+
+// ====== 图片上传 ======
 async function uploadImage(url) {
   const imgR = await fetch(url, { signal: AbortSignal.timeout(20000) });
   if (!imgR.ok) throw new Error(`dl ${imgR.status}`);
@@ -92,10 +277,10 @@ async function uploadImage(url) {
 
   const token = await getToken();
   // prep
-  const p = await fetch(`${FEISHU_DRIVE}/medias/upload_prepare`, {
+  const p = await fetch('https://open.feishu.cn/open-apis/drive/v1/medias/upload_prepare', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ file_name: 'img.jpg', parent_type: 'bitable_file', parent_node: APP_TOKEN, size: blob.size }),
+    body: JSON.stringify({ file_name: 'img.jpg', parent_type: 'bitable_file', parent_node: config.appToken, size: blob.size }),
   });
   const pd = await p.json();
   if (pd.code !== 0) throw new Error(pd.msg);
@@ -105,13 +290,13 @@ async function uploadImage(url) {
   const pf = new FormData();
   pf.append('upload_id', uid); pf.append('seq', '0'); pf.append('size', String(blob.size));
   pf.append('file', blob, 'img.jpg');
-  const pr = await fetch(`${FEISHU_DRIVE}/medias/upload_part`, {
+  const pr = await fetch('https://open.feishu.cn/open-apis/drive/v1/medias/upload_part', {
     method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: pf,
   });
   if ((await pr.json()).code !== 0) throw new Error('part fail');
 
   // finish
-  const fr = await fetch(`${FEISHU_DRIVE}/medias/upload_finish`, {
+  const fr = await fetch('https://open.feishu.cn/open-apis/drive/v1/medias/upload_finish', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ upload_id: uid, block_num: 1 }),
@@ -161,6 +346,8 @@ async function executeTask(t) {
   }
 }
 
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
 // ====== 核心: 采集页面 ======
 async function capturePage(t) {
   const tabId = t.tabId;
@@ -170,78 +357,80 @@ async function capturePage(t) {
     t.tabId = tab.id; t.url = tab.url; t.title = tab.title;
   }
 
+  const features = config.features || DEFAULT_CONFIG.features;
+
   // 获取页面信息
   let pageInfo = {};
-  try { pageInfo = await chrome.tabs.sendMessage(t.tabId, { type: 'extract-page' }); } catch {}
-  
+  if (features.domParse !== false) {
+    try { pageInfo = await chrome.tabs.sendMessage(t.tabId, { type: 'extract-page' }); } catch {}
+  }
+
   // 获取 API 数据
   let apiData = null;
-  try {
-    const r = await chrome.scripting.executeScript({
-      target: { tabId: t.tabId },
-      func: () => {
-        const s = window.__QIANCHENG_XHS_RESPONSES__ || [];
-        return s.filter(r => r.note).pop()?.note || null;
-      },
-      world: 'MAIN',
-    });
-    if (r?.[0]?.result) apiData = r[0].result;
-  } catch {}
-
-  // 获取图片 — 用 RedBox 风格
-  let images = [];
-  try {
-    const r = await chrome.scripting.executeScript({
-      target: { tabId: t.tabId },
-      func: () => {
-        const urls = [];
-        const add = (u) => { if (u && u.startsWith('http') && !urls.includes(u)) urls.push(u); };
-        const isComment = (el) => {
-          while (el) {
-            if (el.closest && el.closest('.comments, [class*="comment"], .comment-container, .note-comment')) return true;
-            el = el.parentElement;
-          }
-          return false;
-        };
-        
-        if (/^\/(explore|discovery\/item)\//i.test(location.pathname)) {
-          // 优先 swiper 轮播图
-          const slides = Array.from(document.querySelectorAll('.note-slider .swiper-slide, .swiper .swiper-slide'))
-            .filter(s => !s.classList.contains('swiper-slide-duplicate') && !isComment(s));
-          slides.forEach(s => {
-            const im = s.querySelector('img');
-            if (im) add(im.getAttribute('src') || im.src);
-          });
-          // 兜底: img-container
-          if (!urls.length) {
-            document.querySelectorAll('.img-container img, .note-image img, .swiper-slide img').forEach(im => {
-              if (!isComment(im) && !im.closest('[class*="avatar"]')) add(im.src || im.getAttribute('src'));
-            });
-          }
-          // 兜底2: og:image
-          if (!urls.length) {
-            const og = document.querySelector('meta[property="og:image"]');
-            if (og?.content) add(og.content);
-          }
-        }
-        return urls.slice(0, 12);
-      },
-    });
-    if (r?.[0]?.result) images = r[0].result;
-  } catch {}
-
-  // 专门提取正文（DOM深度解析经常失败，这里再兜底一次）
-  let domText = pageInfo?.text || '';
-  let domPlatform = pageInfo?.platform || '';
-  if (!domText || domText.length < 50) {
+  if (features.apiIntercept !== false) {
     try {
       const r = await chrome.scripting.executeScript({
         target: { tabId: t.tabId },
         func: () => {
-          // 小红书正文专用提取
+          const s = window.__QIANCHENG_XHS_RESPONSES__ || [];
+          return s.filter(r => r.note).pop()?.note || null;
+        },
+        world: 'MAIN',
+      });
+      if (r?.[0]?.result) apiData = r[0].result;
+    } catch {}
+  }
+
+  // 获取图片
+  let images = [];
+  if (features.imageUpload !== false) {
+    try {
+      const r = await chrome.scripting.executeScript({
+        target: { tabId: t.tabId },
+        func: () => {
+          const urls = [];
+          const add = (u) => { if (u && u.startsWith('http') && !urls.includes(u)) urls.push(u); };
+          const isComment = (el) => {
+            while (el) {
+              if (el.closest && el.closest('.comments, [class*="comment"], .comment-container, .note-comment')) return true;
+              el = el.parentElement;
+            }
+            return false;
+          };
+          if (/^\/(explore|discovery\/item)\//i.test(location.pathname)) {
+            const slides = Array.from(document.querySelectorAll('.note-slider .swiper-slide, .swiper .swiper-slide'))
+              .filter(s => !s.classList.contains('swiper-slide-duplicate') && !isComment(s));
+            slides.forEach(s => {
+              const im = s.querySelector('img');
+              if (im) add(im.getAttribute('src') || im.src);
+            });
+            if (!urls.length) {
+              document.querySelectorAll('.img-container img, .note-image img, .swiper-slide img').forEach(im => {
+                if (!isComment(im) && !im.closest('[class*="avatar"]')) add(im.src || im.getAttribute('src'));
+              });
+            }
+            if (!urls.length) {
+              const og = document.querySelector('meta[property="og:image"]');
+              if (og?.content) add(og.content);
+            }
+          }
+          return urls.slice(0, 12);
+        },
+      });
+      if (r?.[0]?.result) images = r[0].result;
+    } catch {}
+  }
+
+  // 专门提取正文
+  let domText = pageInfo?.text || '';
+  let domPlatform = pageInfo?.platform || '';
+  if (features.domParse !== false && (!domText || domText.length < 50)) {
+    try {
+      const r = await chrome.scripting.executeScript({
+        target: { tabId: t.tabId },
+        func: () => {
           const host = location.hostname;
           if (host.includes('xiaohongshu.com') || host.includes('rednote.com')) {
-            // 按优先级尝试
             const selectors = [
               '#detail-desc', '.note-text', '.desc', '[class*="desc"]',
               '.note-content', '[class*="note-content"]',
@@ -254,7 +443,6 @@ async function capturePage(t) {
                 if (t.length > 30) return { text: t.substring(0, 5000), platform: 'xhs' };
               }
             }
-            // 兜底: 所有符合选择器的元素中最长文本
             const all = document.querySelectorAll(selectors.join(','));
             let best = '';
             all.forEach(el => { const t = (el.textContent || '').trim(); if (t.length > best.length) best = t; });
@@ -287,120 +475,164 @@ async function capturePage(t) {
 
   // 上传图片
   let fileTokens = [];
-  for (let i = 0; i < Math.min(images.length, 9); i++) {
-    try {
-      const ft = await uploadImage(images[i]);
-      if (ft) fileTokens.push({ file_token: ft });
-    } catch(e) { console.warn(`img${i}:`, e.message); }
+  const maxImgs = features.maxImages || 9;
+  if (features.imageUpload !== false) {
+    for (let i = 0; i < Math.min(images.length, maxImgs); i++) {
+      try {
+        const ft = await uploadImage(images[i]);
+        if (ft) fileTokens.push({ file_token: ft });
+      } catch(e) { console.warn(`img${i}:`, e.message); }
+    }
+    addLog('upload', `📸 ${fileTokens.length}/${Math.min(images.length, maxImgs)} 上传`, 'info');
   }
-  addLog('upload', `📸 ${fileTokens.length}/${Math.min(images.length, 9)} 上传`, 'info');
 
-  // 写入飞书
-  const fields = { '选题标题': title, '多行文本': text || title, '作者/来源': author, '来源平台': platform, '选题来源': '浏览器采集', '状态': '待选题', '优先级': '中' };
-  if (sourceUrl) fields['来源链接'] = { link: sourceUrl, text: title.substring(0, 50) };
-  if (fileTokens.length) fields['素材图片'] = fileTokens;
-  await feishuWrite(fields);
+  // 构建采集数据结构
+  const captureData = {
+    title,
+    text: text || title,
+    author: author || '',
+    platform,
+    sourceUrl: sourceUrl || '',
+    sourceType: '浏览器采集',
+    images: fileTokens.length ? fileTokens : undefined,
+    tags: apiData?.tags || pageInfo?.tags || [],
+    interactionLikes: apiData?.interaction?.liked_count ?? pageInfo?.likes ?? 0,
+    interactionCollects: apiData?.interaction?.collected_count ?? pageInfo?.collects ?? 0,
+    interactionComments: apiData?.interaction?.comment_count ?? pageInfo?.comments ?? 0,
+  };
+
+  await feishuWrite(captureData);
   addLog('feishu', `✅ ${title.substring(0, 30)}`, 'success');
 }
 
 async function captureLink(t) {
-  await feishuWrite({ '选题标题': t.title || t.url, '来源链接': { link: t.url, text: t.title || t.url }, '来源平台': '其他', '选题来源': '链接采集', '状态': '待选题', '优先级': '中' });
+  addLog('capture', `🔗 ${t.title || t.url}`, 'info');
+  const captureData = {
+    title: t.title || t.url,
+    text: t.url || '',
+    author: '',
+    platform: '网页',
+    sourceUrl: t.url || '',
+    sourceType: '链接采集',
+  };
+  await feishuWrite(captureData);
 }
 
 async function captureImage(t) {
-  await feishuWrite({ '选题标题': t.pageUrl || '图片素材', '来源链接': { link: t.url, text: '图片' }, '来源平台': '其他', '选题来源': '图片采集', '状态': '待选题' });
+  addLog('capture', `🖼️ ${t.url}`, 'info');
+  let fileToken = null;
+  if (config.features?.imageUpload !== false) {
+    try { fileToken = await uploadImage(t.url); } catch(e) { console.warn(e.message); }
+  }
+  const captureData = {
+    title: '图片采集',
+    text: t.pageUrl || t.url || '',
+    author: '',
+    platform: '网页',
+    sourceUrl: t.pageUrl || t.url || '',
+    sourceType: '图片采集',
+    images: fileToken ? [{ file_token: fileToken }] : undefined,
+  };
+  await feishuWrite(captureData);
 }
 
 // ====== 博主批量采集 ======
 async function collectBlogger(t) {
-  let notes = [];
   const tabId = t.tabId;
+  const limit = t.limit || 30;
+  const interval = config.collectIntervalMs || 2500;
+
+  // 获取博主页面上的笔记列表
+  let noteIds = [];
   try {
     const r = await chrome.scripting.executeScript({
-      target: { tabId }, world: 'MAIN',
-      func: () => {
-        const s = window.__QIANCHENG_XHS_RESPONSES__ || [];
-        return s.filter(r => r.note).map(r => r.note).slice(-50);
+      target: { tabId },
+      func: (maxItems) => {
+        const ids = [];
+        const links = document.querySelectorAll('a[href*="/explore/"], a[href*="/discovery/item/"]');
+        links.forEach(a => {
+          const match = (a.href || '').match(/\/(explore|discovery\/item)\/([A-Za-z0-9]+)/);
+          if (match?.[2] && !ids.includes(match[2])) ids.push(match[2]);
+          if (ids.length >= maxItems) return;
+        });
+        return ids.slice(0, maxItems);
       },
+      args: [limit],
     });
-    if (r?.[0]?.result) notes = r[0].result;
-  } catch(e) { console.warn('api fetch:', e.message); }
+    if (r?.[0]?.result) noteIds = r[0].result;
+  } catch(e) { console.warn('blogger list:', e.message); }
 
-  if (!notes.length) throw new Error('no api data. 请确保在博主主页并滚动加载笔记');
-  
-  const limit = Math.min(t.limit || 20, notes.length);
-  const batch = notes.slice(0, limit);
-  addLog('blogger', `🚀 批量采集 ${batch.length} 篇`, 'info');
+  if (!noteIds.length) throw new Error('未找到笔记');
 
-  let saved = 0;
-  for (let i = 0; i < batch.length; i++) {
-    const n = batch[i];
-    try {
-      let fts = [];
-      if (n.images?.length) {
-        try { const ft = await uploadImage(n.images[0]); if (ft) fts.push({ file_token: ft }); } catch {}
-      }
-      const fields = {
-        '选题标题': n.title || '(无标题)',
-        '多行文本': (n.desc || '').substring(0, 5000),
-        '作者/来源': n.author?.nickname || '',
-        '来源平台': '小红书',
-        '来源链接': n.note_id ? { link: `https://www.xiaohongshu.com/explore/${n.note_id}`, text: n.title } : undefined,
-        '选题来源': '博主采集', '状态': '待选题', '优先级': '中',
-      };
-      if (fts.length) fields['素材图片'] = fts;
-      await feishuWrite(fields);
-      saved++;
-      
-      t.progress = { saved, total: batch.length };
-      broadcast();
-      
-      if (saved < batch.length) await new Promise(r => setTimeout(r, COLLECT_INTERVAL_MS));
-    } catch(e) { addLog('blogger', `❌ ${n.title}: ${e.message}`, 'error'); }
-  }
-  
-  t.result = { saved, total: batch.length };
-  addLog('blogger', `✅ ${saved}/${batch.length}`, 'success');
-}
-
-// ====== 批量链接采集(对标RedBox) ======
-async function collectBatch(t) {
-  const urls = Array.isArray(t.urls) ? t.urls.filter(Boolean) : [];
-  if (!urls.length) throw new Error('no urls');
-  
-  addLog('batch', `🚀 批量采集 ${urls.length} 篇`, 'info');
+  addLog('collect', `🚀 博主 ${noteIds.length} 篇`, 'info');
+  const total = noteIds.length;
   let saved = 0;
 
-  for (let i = 0; i < urls.length; i++) {
+  t.progress = { total, saved: 0 };
+  broadcast();
+
+  for (let i = 0; i < total; i++) {
+    const noteUrl = `https://www.xiaohongshu.com/explore/${noteIds[i]}`;
     try {
-      // 打开新tab采集
-      const tab = await chrome.tabs.create({ url: urls[i], active: false });
-      await new Promise(r => setTimeout(r, 5000)); // 等待加载
-      await capturePage({ tabId: tab.id, url: urls[i] });
-      await chrome.tabs.remove(tab.id);
+      await chrome.tabs.update(tabId, { url: noteUrl });
+      await sleep(interval + 2000); // 等待页面加载
+
+      // 临时入队单篇采集
+      const subTask = { type: 'capture-page', tabId, url: noteUrl, title: noteIds[i] };
+      await capturePage(subTask);
       saved++;
-      t.progress = { saved, total: urls.length };
-      broadcast();
-      if (saved < urls.length) await new Promise(r => setTimeout(r, COLLECT_INTERVAL_MS));
     } catch(e) {
-      addLog('batch', `❌ ${urls[i]}: ${e.message}`, 'error');
-      // 清理tab
-      try {
-        const tabs = await chrome.tabs.query({ url: urls[i] });
-        if (tabs.length) await chrome.tabs.remove(tabs[0].id);
-      } catch {}
+      console.warn(`blogger ${i}:`, e.message);
     }
+    t.progress = { total, saved };
+    broadcast();
   }
-  t.result = { saved, total: urls.length };
-  addLog('batch', `✅ ${saved}/${urls.length}`, 'success');
+
+  addLog('done', `✅ 博主采集完成 ${saved}/${total}`, 'success');
 }
 
-// ====== 日志 + 广播 ======
-function addLog(scope, msg, level) {
-  taskLogs.unshift({ scope, msg, level, time: Date.now() });
-  if (taskLogs.length > MAX_LOGS) taskLogs.length = MAX_LOGS;
+// ====== 批量链接采集 ======
+async function collectBatch(t) {
+  const urls = t.urls || [];
+  if (!urls.length) throw new Error('no urls');
+
+  addLog('collect', `🚀 批量采集 ${urls.length} 个链接`, 'info');
+  const total = urls.length;
+  let saved = 0;
+
+  t.progress = { total, saved: 0 };
+  broadcast();
+
+  for (let i = 0; i < total; i++) {
+    try {
+      const captureData = {
+        title: urls[i],
+        text: urls[i],
+        author: '',
+        platform: '网页',
+        sourceUrl: urls[i],
+        sourceType: '批量采集',
+      };
+      await feishuWrite(captureData);
+      saved++;
+    } catch(e) {
+      console.warn(`batch ${i}:`, e.message);
+    }
+    t.progress = { total, saved };
+    broadcast();
+    await sleep(config.collectIntervalMs || 2500);
+  }
+
+  addLog('done', `✅ 批量采集完成 ${saved}/${total}`, 'success');
 }
 
+// ====== 日志 ======
+function addLog(stage, msg, level) {
+  taskLogs.unshift({ time: Date.now(), stage, msg, level });
+  while (taskLogs.length > MAX_LOGS) taskLogs.pop();
+}
+
+// ====== 广播 ======
 function broadcast() {
   chrome.runtime.sendMessage({
     type: 'queue:update',
@@ -422,10 +654,13 @@ function handleMessage(msg, sender, sendResponse) {
         const up = (await chrome.storage.local.get(['updateState'])).updateState || {};
         sendResponse({
           tab: tab ? { id: tab.id, url: tab.url, title: tab.title } : null, pageInfo,
-          tokenOk: !!accessToken,
+          tokenOk: !!(config.appId && config.appSecret && accessToken),
           active: activeTask, last: lastTask, queue: taskQueue.slice(0, 10), logs: taskLogs.slice(0, 20),
           queueLen: taskQueue.length, isRunning: !!activeTask,
-          update: up,
+          update: up, config: {
+            tableName: config.tableName || config.tableId,
+            hasConfig: !!(config.appId && config.appSecret && config.appToken && config.tableId),
+          },
         });
         break;
       }
@@ -465,6 +700,70 @@ function handleMessage(msg, sender, sendResponse) {
         await checkUpdate(true);
         const up = (await chrome.storage.local.get(['updateState'])).updateState || {};
         sendResponse({ success: true, update: up });
+        break;
+      }
+
+      // ====== v4.0 新增: 设置相关消息 ======
+      case 'settings:get-config': {
+        sendResponse({ success: true, config });
+        break;
+      }
+
+      case 'settings:save-config': {
+        try {
+          await saveConfig(msg.config);
+          sendResponse({ success: true, message: '配置已保存' });
+        } catch(e) {
+          sendResponse({ success: false, error: e.message });
+        }
+        break;
+      }
+
+      case 'settings:fetch-fields': {
+        try {
+          const result = await fetchTableFields(
+            msg.appToken || config.appToken,
+            msg.tableId || config.tableId,
+            msg.appId,
+            msg.appSecret
+          );
+          sendResponse(result);
+        } catch(e) {
+          sendResponse({ success: false, error: e.message });
+        }
+        break;
+      }
+
+      case 'settings:reset-config': {
+        try {
+          config = { ...DEFAULT_CONFIG };
+          await saveConfig(config);
+          accessToken = null; tokenExpiresAt = 0;
+          sendResponse({ success: true, message: '已重置为默认配置' });
+        } catch(e) {
+          sendResponse({ success: false, error: e.message });
+        }
+        break;
+      }
+
+      case 'settings:test-connection': {
+        try {
+          if (!config.appId || !config.appSecret) {
+            sendResponse({ success: false, error: '请先配置 APP ID 和 APP Secret' });
+            break;
+          }
+          await getToken();
+          // 尝试获取表信息验证
+          try {
+            await feishuRequest(`bitable/v1/apps/${config.appToken}/tables/${config.tableId}`, { method: 'GET' });
+          } catch(e) {
+            sendResponse({ success: false, error: `表格连接失败: ${e.message}` });
+            break;
+          }
+          sendResponse({ success: true, message: '飞书连接成功' });
+        } catch(e) {
+          sendResponse({ success: false, error: `授权失败: ${e.message}` });
+        }
         break;
       }
 
