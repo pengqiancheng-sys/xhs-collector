@@ -67,7 +67,7 @@ let config = { ...DEFAULT_CONFIG };
   chrome.storage.onChanged.addListener(onStorageChange);
   setInterval(processQueue, 1000);
   initUpdate();
-  console.log('🚀 前程智囊团 v4.0.13 可配置版');
+  console.log('🚀 前程智囊团 v4.0.14 可配置版');
 })();
 
 async function loadConfig() {
@@ -517,71 +517,115 @@ async function capturePage(t) {
       func: () => {
         function parseCount(v) {
           if (!v) return 0;
-          const s = String(v).trim().replace(/[\s,]/g, '').replace(/[^0-9.\u4e00-\u9fa5]/g, '');
+          var s = String(v).trim().replace(/[\s,]/g, '').replace(/[^0-9.\u4e00-\u9fa5]/g, '');
           if (!s) return 0;
-          if (s.includes('万')) { const n = parseFloat(s.replace('万', '')); return isNaN(n) ? 0 : Math.round(n * 10000); }
-          const n = parseFloat(s); return isNaN(n) ? 0 : Math.round(n);
+          if (s.includes('万')) { var n = parseFloat(s.replace('万', '')); return isNaN(n) ? 0 : Math.round(n * 10000); }
+          var n = parseFloat(s); return isNaN(n) ? 0 : Math.round(n);
         }
-        function getDomTime() {
-          const sels = ['.date', '[class*="date"]', '.publish-time', '[class*="time"]', 'time', '.bottom-container .date'];
-          for (const sel of sels) {
-            const el = document.querySelector(sel);
+        function getDomTime(root) {
+          var sels = ['.date', '[class*="date"]', '.publish-time', '[class*="time"]', 'time', '.bottom-container .date'];
+          var scope = root || document;
+          for (var i = 0; i < sels.length; i++) {
+            var el = scope.querySelector(sels[i]);
             if (!el) continue;
-            const raw = (el.textContent || '').trim();
+            var raw = (el.textContent || '').trim();
             if (!raw) continue;
-            const now = new Date();
-            const mm = raw.match(/(\d+)\s*分钟前/); if (mm) return now.getTime() - Number(mm[1]) * 60000;
-            const hh = raw.match(/(\d+)\s*小时前/); if (hh) return now.getTime() - Number(hh[1]) * 3600000;
-            const dd = raw.match(/(\d+)\s*天前/); if (dd) return now.getTime() - Number(dd[1]) * 86400000;
-            const ymd = raw.match(/(20\d{2})[-\/.年](\d{1,2})[-\/.月](\d{1,2})/);
+            var now = new Date();
+            var mm = raw.match(/(\d+)\s*分钟前/); if (mm) return now.getTime() - Number(mm[1]) * 60000;
+            var hh = raw.match(/(\d+)\s*小时前/); if (hh) return now.getTime() - Number(hh[1]) * 3600000;
+            var dd = raw.match(/(\d+)\s*天前/); if (dd) return now.getTime() - Number(dd[1]) * 86400000;
+            var ymd = raw.match(/(20\d{2})[-\/.年](\d{1,2})[-\/.月](\d{1,2})/);
             if (ymd) return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])).getTime();
-            const md = raw.match(/(\d{1,2})[-\/.月](\d{1,2})/);
+            var md = raw.match(/(\d{1,2})[-\/.月](\d{1,2})/);
             if (md) return new Date(new Date().getFullYear(), Number(md[1]) - 1, Number(md[2])).getTime();
           }
           return 0;
         }
-        // RedBox 同款作者选择器
-        function getAuthor() {
-          for (const sel of ['.author .username', '.author-wrapper .username', '.username']) {
-            const el = document.querySelector(sel);
-            if (el) { const t = (el.innerText || el.textContent || '').trim(); if (t) return t; }
+        // === RedBox 同款：先定位当前笔记弹窗根元素 ===
+        function getActiveMask() {
+          var masks = document.querySelectorAll('.note-detail-mask[note-id]');
+          if (masks.length) return masks[0];
+          masks = document.querySelectorAll('.note-detail-mask');
+          for (var i = 0; i < masks.length; i++) {
+            var style = window.getComputedStyle(masks[i]);
+            if (style.display !== 'none' && style.visibility !== 'hidden') return masks[i];
+          }
+          return null;
+        }
+        function getNoteRoot() {
+          var mask = getActiveMask();
+          if (mask) {
+            var scoped = mask.querySelector('#noteContainer.note-container') || mask.querySelector('#noteContainer') || mask.querySelector('.note-container');
+            if (scoped) return scoped;
+            return mask;
+          }
+          // 兜底：从正文锚点往上找
+          var anchor = document.querySelector('#detail-desc') || document.querySelector('#detail-title') || document.querySelector('.note-content');
+          if (!anchor) return document.body;
+          return anchor.closest('#noteContainer.note-container') || anchor.closest('#noteContainer') || anchor.closest('.note-container') || anchor.closest('.note-detail-mask') || document.body;
+        }
+        // === 在根元素范围内查找作者 ===
+        function getAuthor(root) {
+          var sels = ['.author .username', '.author-wrapper .username', '.username'];
+          var scope = root || document;
+          for (var i = 0; i < sels.length; i++) {
+            var el = scope.querySelector(sels[i]);
+            if (el) { var t = (el.innerText || el.textContent || '').trim(); if (t) return t; }
           }
           return '';
         }
-        // 从正文文本中提取 #标签（RedBox 同款 extractTagsFromText）
+        // === 在根元素范围内查找互动数据 ===
+        function findInRoot(root, sels) {
+          var scope = root || document;
+          for (var i = 0; i < sels.length; i++) {
+            var els = scope.querySelectorAll(sels[i]);
+            for (var j = 0; j < els.length; j++) {
+              var el = els[j];
+              if (el.closest('[class*="comment"]') || el.closest('.comments-el') || el.closest('.comment-container') || el.closest('.comment-list') || el.closest('.comment-item')) continue;
+              var t = (el.textContent || '').trim();
+              if (t) return t;
+            }
+          }
+          return '';
+        }
+        // === 从正文文本中提取 #标签（RedBox 同款） ===
         function extractTags(text) {
-          const tags = [];
-          const seen = new Set();
-          const tokens = String(text || '').split('#').slice(1);
-          for (const token of tokens) {
-            const candidate = token.split(/\r?\n/, 1)[0].split(/\s+/, 1)[0].replace(/^[#]+|[，,。.！!？?【】 ]+$/g, '').trim();
-            if (candidate && !seen.has(candidate)) { seen.add(candidate); tags.push('#' + candidate); }
+          var tags = [];
+          var seen = {};
+          var tokens = String(text || '').split('#').slice(1);
+          for (var i = 0; i < tokens.length; i++) {
+            var candidate = tokens[i].split(/\r?\n/, 1)[0].split(/\s+/, 1)[0].replace(/^[#]+|[，,。.！!？?【】 ]+$/g, '').trim();
+            if (candidate && !seen[candidate]) { seen[candidate] = true; tags.push('#' + candidate); }
           }
           return tags;
         }
-        // 互动：RedBox 同款 getStats + 排除评论区的加强版
-        const likeEl = Array.from(document.querySelectorAll('.like-wrapper .count,[class*="like-wrapper"] .count,[class*="like"] .count'))
-          .find(el => !el.closest('[class*="comment"]') && !el.closest('.comments-el') && !el.closest('.comment-container') && !el.closest('.comment-list') && !el.closest('.comment-item'));
-        const collectEl = Array.from(document.querySelectorAll('.collect-wrapper .count,[class*="collect-wrapper"] .count,[class*="collect"] .count'))
-          .find(el => !el.closest('[class*="comment"]') && !el.closest('.comments-el') && !el.closest('.comment-container') && !el.closest('.comment-list') && !el.closest('.comment-item'));
-        const commentEl = Array.from(document.querySelectorAll('.chat-wrapper .count,.comment-wrapper .count,[class*="comment"] .count'))
-          .find(el => !el.closest('.comments-el') && !el.closest('.comment-list') && !el.closest('.comment-item'));
-        // 正文：取页面全部可见笔记正文
-        let domText = '';
-        const textEls = document.querySelectorAll('#detail-desc .note-text, .desc .note-text, .note-content .note-text');
-        if (textEls.length) domText = Array.from(textEls).map(el => (el.innerText || el.textContent || '').trim()).filter(Boolean).join('\n\n');
+
+        var root = getNoteRoot();
+        var author = getAuthor(root);
+        // 互动：只在当前笔记弹窗范围内查找
+        var likes = parseCount(findInRoot(root, ['.like-wrapper .count', '[class*="like-wrapper"] .count', '[class*="like"] .count']));
+        var collects = parseCount(findInRoot(root, ['.collect-wrapper .count', '[class*="collect-wrapper"] .count', '[class*="collect"] .count']));
+        var comments = parseCount(findInRoot(root, ['.chat-wrapper .count', '.comment-wrapper .count', '.engage-bar [class*="comment"] .count', '.interactions [class*="comment"] .count']));
+        // 正文：只在当前笔记弹窗范围内查找
+        var domText = '';
+        var textEls = (root || document).querySelectorAll('#detail-desc .note-text, .desc .note-text, .note-content .note-text');
+        if (textEls.length) {
+          var parts = [];
+          for (var k = 0; k < textEls.length; k++) { var p = (textEls[k].innerText || textEls[k].textContent || '').trim(); if (p) parts.push(p); }
+          domText = parts.join('\n\n');
+        }
         if (!domText) {
-          const meta = document.querySelector('meta[property="og:description"]');
+          var meta = document.querySelector('meta[property="og:description"]');
           if (meta) domText = (meta.getAttribute('content') || '').trim();
         }
         return {
-          author: getAuthor(),
+          author: author,
           text: domText,
           tags: extractTags(domText),
-          likes: parseCount(likeEl?.textContent || ''),
-          collects: parseCount(collectEl?.textContent || ''),
-          comments: parseCount(commentEl?.textContent || ''),
-          time: getDomTime(),
+          likes: likes,
+          collects: collects,
+          comments: comments,
+          time: getDomTime(root),
         };
       },
     });
@@ -887,71 +931,115 @@ function handleMessage(msg, sender, sendResponse) {
       func: () => {
         function parseCount(v) {
           if (!v) return 0;
-          const s = String(v).trim().replace(/[\s,]/g, '').replace(/[^0-9.\u4e00-\u9fa5]/g, '');
+          var s = String(v).trim().replace(/[\s,]/g, '').replace(/[^0-9.\u4e00-\u9fa5]/g, '');
           if (!s) return 0;
-          if (s.includes('万')) { const n = parseFloat(s.replace('万', '')); return isNaN(n) ? 0 : Math.round(n * 10000); }
-          const n = parseFloat(s); return isNaN(n) ? 0 : Math.round(n);
+          if (s.includes('万')) { var n = parseFloat(s.replace('万', '')); return isNaN(n) ? 0 : Math.round(n * 10000); }
+          var n = parseFloat(s); return isNaN(n) ? 0 : Math.round(n);
         }
-        function getDomTime() {
-          const sels = ['.date', '[class*="date"]', '.publish-time', '[class*="time"]', 'time', '.bottom-container .date'];
-          for (const sel of sels) {
-            const el = document.querySelector(sel);
+        function getDomTime(root) {
+          var sels = ['.date', '[class*="date"]', '.publish-time', '[class*="time"]', 'time', '.bottom-container .date'];
+          var scope = root || document;
+          for (var i = 0; i < sels.length; i++) {
+            var el = scope.querySelector(sels[i]);
             if (!el) continue;
-            const raw = (el.textContent || '').trim();
+            var raw = (el.textContent || '').trim();
             if (!raw) continue;
-            const now = new Date();
-            const mm = raw.match(/(\d+)\s*分钟前/); if (mm) return now.getTime() - Number(mm[1]) * 60000;
-            const hh = raw.match(/(\d+)\s*小时前/); if (hh) return now.getTime() - Number(hh[1]) * 3600000;
-            const dd = raw.match(/(\d+)\s*天前/); if (dd) return now.getTime() - Number(dd[1]) * 86400000;
-            const ymd = raw.match(/(20\d{2})[-\/.年](\d{1,2})[-\/.月](\d{1,2})/);
+            var now = new Date();
+            var mm = raw.match(/(\d+)\s*分钟前/); if (mm) return now.getTime() - Number(mm[1]) * 60000;
+            var hh = raw.match(/(\d+)\s*小时前/); if (hh) return now.getTime() - Number(hh[1]) * 3600000;
+            var dd = raw.match(/(\d+)\s*天前/); if (dd) return now.getTime() - Number(dd[1]) * 86400000;
+            var ymd = raw.match(/(20\d{2})[-\/.年](\d{1,2})[-\/.月](\d{1,2})/);
             if (ymd) return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])).getTime();
-            const md = raw.match(/(\d{1,2})[-\/.月](\d{1,2})/);
+            var md = raw.match(/(\d{1,2})[-\/.月](\d{1,2})/);
             if (md) return new Date(new Date().getFullYear(), Number(md[1]) - 1, Number(md[2])).getTime();
           }
           return 0;
         }
-        // RedBox 同款作者选择器
-        function getAuthor() {
-          for (const sel of ['.author .username', '.author-wrapper .username', '.username']) {
-            const el = document.querySelector(sel);
-            if (el) { const t = (el.innerText || el.textContent || '').trim(); if (t) return t; }
+        // === RedBox 同款：先定位当前笔记弹窗根元素 ===
+        function getActiveMask() {
+          var masks = document.querySelectorAll('.note-detail-mask[note-id]');
+          if (masks.length) return masks[0];
+          masks = document.querySelectorAll('.note-detail-mask');
+          for (var i = 0; i < masks.length; i++) {
+            var style = window.getComputedStyle(masks[i]);
+            if (style.display !== 'none' && style.visibility !== 'hidden') return masks[i];
+          }
+          return null;
+        }
+        function getNoteRoot() {
+          var mask = getActiveMask();
+          if (mask) {
+            var scoped = mask.querySelector('#noteContainer.note-container') || mask.querySelector('#noteContainer') || mask.querySelector('.note-container');
+            if (scoped) return scoped;
+            return mask;
+          }
+          // 兜底：从正文锚点往上找
+          var anchor = document.querySelector('#detail-desc') || document.querySelector('#detail-title') || document.querySelector('.note-content');
+          if (!anchor) return document.body;
+          return anchor.closest('#noteContainer.note-container') || anchor.closest('#noteContainer') || anchor.closest('.note-container') || anchor.closest('.note-detail-mask') || document.body;
+        }
+        // === 在根元素范围内查找作者 ===
+        function getAuthor(root) {
+          var sels = ['.author .username', '.author-wrapper .username', '.username'];
+          var scope = root || document;
+          for (var i = 0; i < sels.length; i++) {
+            var el = scope.querySelector(sels[i]);
+            if (el) { var t = (el.innerText || el.textContent || '').trim(); if (t) return t; }
           }
           return '';
         }
-        // 从正文文本中提取 #标签（RedBox 同款 extractTagsFromText）
+        // === 在根元素范围内查找互动数据 ===
+        function findInRoot(root, sels) {
+          var scope = root || document;
+          for (var i = 0; i < sels.length; i++) {
+            var els = scope.querySelectorAll(sels[i]);
+            for (var j = 0; j < els.length; j++) {
+              var el = els[j];
+              if (el.closest('[class*="comment"]') || el.closest('.comments-el') || el.closest('.comment-container') || el.closest('.comment-list') || el.closest('.comment-item')) continue;
+              var t = (el.textContent || '').trim();
+              if (t) return t;
+            }
+          }
+          return '';
+        }
+        // === 从正文文本中提取 #标签（RedBox 同款） ===
         function extractTags(text) {
-          const tags = [];
-          const seen = new Set();
-          const tokens = String(text || '').split('#').slice(1);
-          for (const token of tokens) {
-            const candidate = token.split(/\r?\n/, 1)[0].split(/\s+/, 1)[0].replace(/^[#]+|[，,。.！!？?【】 ]+$/g, '').trim();
-            if (candidate && !seen.has(candidate)) { seen.add(candidate); tags.push('#' + candidate); }
+          var tags = [];
+          var seen = {};
+          var tokens = String(text || '').split('#').slice(1);
+          for (var i = 0; i < tokens.length; i++) {
+            var candidate = tokens[i].split(/\r?\n/, 1)[0].split(/\s+/, 1)[0].replace(/^[#]+|[，,。.！!？?【】 ]+$/g, '').trim();
+            if (candidate && !seen[candidate]) { seen[candidate] = true; tags.push('#' + candidate); }
           }
           return tags;
         }
-        // 互动：RedBox 同款 getStats + 排除评论区的加强版
-        const likeEl = Array.from(document.querySelectorAll('.like-wrapper .count,[class*="like-wrapper"] .count,[class*="like"] .count'))
-          .find(el => !el.closest('[class*="comment"]') && !el.closest('.comments-el') && !el.closest('.comment-container') && !el.closest('.comment-list') && !el.closest('.comment-item'));
-        const collectEl = Array.from(document.querySelectorAll('.collect-wrapper .count,[class*="collect-wrapper"] .count,[class*="collect"] .count'))
-          .find(el => !el.closest('[class*="comment"]') && !el.closest('.comments-el') && !el.closest('.comment-container') && !el.closest('.comment-list') && !el.closest('.comment-item'));
-        const commentEl = Array.from(document.querySelectorAll('.chat-wrapper .count,.comment-wrapper .count,[class*="comment"] .count'))
-          .find(el => !el.closest('.comments-el') && !el.closest('.comment-list') && !el.closest('.comment-item'));
-        // 正文：取页面全部可见笔记正文
-        let domText = '';
-        const textEls = document.querySelectorAll('#detail-desc .note-text, .desc .note-text, .note-content .note-text');
-        if (textEls.length) domText = Array.from(textEls).map(el => (el.innerText || el.textContent || '').trim()).filter(Boolean).join('\n\n');
+
+        var root = getNoteRoot();
+        var author = getAuthor(root);
+        // 互动：只在当前笔记弹窗范围内查找
+        var likes = parseCount(findInRoot(root, ['.like-wrapper .count', '[class*="like-wrapper"] .count', '[class*="like"] .count']));
+        var collects = parseCount(findInRoot(root, ['.collect-wrapper .count', '[class*="collect-wrapper"] .count', '[class*="collect"] .count']));
+        var comments = parseCount(findInRoot(root, ['.chat-wrapper .count', '.comment-wrapper .count', '.engage-bar [class*="comment"] .count', '.interactions [class*="comment"] .count']));
+        // 正文：只在当前笔记弹窗范围内查找
+        var domText = '';
+        var textEls = (root || document).querySelectorAll('#detail-desc .note-text, .desc .note-text, .note-content .note-text');
+        if (textEls.length) {
+          var parts = [];
+          for (var k = 0; k < textEls.length; k++) { var p = (textEls[k].innerText || textEls[k].textContent || '').trim(); if (p) parts.push(p); }
+          domText = parts.join('\n\n');
+        }
         if (!domText) {
-          const meta = document.querySelector('meta[property="og:description"]');
+          var meta = document.querySelector('meta[property="og:description"]');
           if (meta) domText = (meta.getAttribute('content') || '').trim();
         }
         return {
-          author: getAuthor(),
+          author: author,
           text: domText,
           tags: extractTags(domText),
-          likes: parseCount(likeEl?.textContent || ''),
-          collects: parseCount(collectEl?.textContent || ''),
-          comments: parseCount(commentEl?.textContent || ''),
-          time: getDomTime(),
+          likes: likes,
+          collects: collects,
+          comments: comments,
+          time: getDomTime(root),
         };
       },
     });
