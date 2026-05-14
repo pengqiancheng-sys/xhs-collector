@@ -11,6 +11,7 @@ const DEFAULT_CONFIG = {
   appToken: '',
   tableId: '',
   tableName: '',
+  bitableUrl: '',
   // 字段映射: 采集数据的 key → 表格字段名
   fieldMapping: {
     title: '选题标题',
@@ -167,6 +168,33 @@ async function feishuRequest(path, options = {}) {
     throw new Error(data.msg || `HTTP ${res.status}`);
   }
   return data;
+}
+
+
+async function fetchTables(appToken, appId, appSecret) {
+  const savedAppId = config.appId;
+  const savedSecret = config.appSecret;
+  config.appId = appId || savedAppId;
+  config.appSecret = appSecret || savedSecret;
+  accessToken = null; tokenExpiresAt = 0;
+
+  try {
+    const data = await feishuRequest(
+      `bitable/v1/apps/${appToken}/tables?page_size=100`,
+      { method: 'GET' }
+    );
+    const tables = (data.data?.items || []).map(t => ({
+      id: t.table_id,
+      name: t.name || t.table_id,
+    }));
+    return { success: true, tables };
+  } catch (e) {
+    return { success: false, error: e.message };
+  } finally {
+    config.appId = savedAppId;
+    config.appSecret = savedSecret;
+    accessToken = null; tokenExpiresAt = 0;
+  }
 }
 
 // ====== 获取表字段列表（设置页用） ======
@@ -719,6 +747,20 @@ function handleMessage(msg, sender, sendResponse) {
         break;
       }
 
+      case 'settings:list-tables': {
+        try {
+          const result = await fetchTables(
+            msg.appToken || config.appToken,
+            msg.appId,
+            msg.appSecret
+          );
+          sendResponse(result);
+        } catch(e) {
+          sendResponse({ success: false, error: e.message });
+        }
+        break;
+      }
+
       case 'settings:fetch-fields': {
         try {
           const result = await fetchTableFields(
@@ -755,12 +797,12 @@ function handleMessage(msg, sender, sendResponse) {
           await getToken();
           // 尝试获取表信息验证
           try {
-            await feishuRequest(`bitable/v1/apps/${config.appToken}/tables/${config.tableId}`, { method: 'GET' });
+            await feishuRequest(`bitable/v1/apps/${config.appToken}/tables/${config.tableId}/fields`, { method: 'GET' });
           } catch(e) {
             sendResponse({ success: false, error: `表格连接失败: ${e.message}` });
             break;
           }
-          sendResponse({ success: true, message: '飞书连接成功' });
+          sendResponse({ success: true, message: '飞书连接成功，字段读取正常' });
         } catch(e) {
           sendResponse({ success: false, error: `授权失败: ${e.message}` });
         }

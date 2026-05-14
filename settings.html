@@ -10,7 +10,7 @@
   <main class="settings-app">
     <header class="settings-header">
       <h1>⚙️ 前程智囊团 · 采集设置</h1>
-      <span class="version" id="version-tag">v4.0.0</span>
+      <span class="version" id="version-tag">v4.0.1</span>
     </header>
 
     <!-- 标签页导航 -->
@@ -42,25 +42,44 @@
 
       <div class="card">
         <div class="card-title">目标多维表格</div>
-        <p class="card-desc">输入你要写入的飞书多维表格信息。可从表格 URL 中提取 token</p>
+        <p class="card-desc">推荐直接粘贴完整多维表格地址，插件会自动识别 APP_TOKEN，并列出可写入的数据表。</p>
 
-        <div class="form-row">
-          <div class="form-group flex-2">
-            <label>多维表格 Token (APP_TOKEN)</label>
-            <input type="text" id="cfg-appToken" placeholder="从飞书表格 URL 中获取" spellcheck="false">
-          </div>
-          <div class="form-group flex-1">
-            <label>数据表 ID (TABLE_ID)</label>
-            <input type="text" id="cfg-tableId" placeholder="tbl..." spellcheck="false">
-          </div>
+        <div class="form-group">
+          <label>多维表格完整地址（推荐）</label>
+          <input type="text" id="cfg-bitableUrl" placeholder="https://xxx.feishu.cn/base/APP_TOKEN?table=tbl... 或任意多维表格链接" spellcheck="false">
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="btn-parse-url">🔎 解析链接</button>
+          <button class="btn btn-secondary" id="btn-list-tables">📚 读取数据表列表</button>
         </div>
 
         <div class="form-row" style="margin-top:12px;">
+          <div class="form-group flex-2">
+            <label>选择数据表</label>
+            <select id="cfg-tableSelect">
+              <option value="">请先读取数据表列表</option>
+            </select>
+          </div>
           <div class="form-group flex-1">
-            <label>数据表名称（选填，仅显示用）</label>
-            <input type="text" id="cfg-tableName" placeholder="如：选题管理表" spellcheck="false">
+            <label>数据表名称（显示用）</label>
+            <input type="text" id="cfg-tableName" placeholder="自动填充" spellcheck="false">
           </div>
         </div>
+
+        <details class="advanced-config">
+          <summary>高级：手动填写 Token / Table ID</summary>
+          <div class="form-row" style="margin-top:12px;">
+            <div class="form-group flex-2">
+              <label>多维表格 Token (APP_TOKEN)</label>
+              <input type="text" id="cfg-appToken" placeholder="base 后面的 token" spellcheck="false">
+            </div>
+            <div class="form-group flex-1">
+              <label>数据表 ID (TABLE_ID)</label>
+              <input type="text" id="cfg-tableId" placeholder="tbl..." spellcheck="false">
+            </div>
+          </div>
+        </details>
 
         <div class="btn-row">
           <button class="btn btn-secondary" id="btn-fetch-fields">📋 自动探测表格字段</button>
@@ -147,7 +166,7 @@
       <div class="card">
         <div class="card-title">前程智囊团 · 浏览器素材采集插件</div>
         <p class="card-desc" style="line-height:1.8;">
-          版本：<strong id="about-version">v4.0.0</strong><br>
+          版本：<strong id="about-version">v4.0.1</strong><br>
           开源地址：<a href="https://github.com/pengqiancheng-sys/xhs-collector" target="_blank">GitHub</a><br>
           许可证：MIT<br><br>
           一键采集小红书 / YouTube / 网页素材，自动同步到飞书多维表格。<br>

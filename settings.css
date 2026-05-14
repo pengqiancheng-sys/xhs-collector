@@ -338,3 +338,28 @@ body {
   .mapping-label { min-width: auto; }
   .tab-btn { font-size: 11px; padding: 8px 10px; }
 }
+
+.advanced-config {
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.025);
+  border: 1px dashed rgba(255,255,255,0.12);
+  border-radius: 8px;
+}
+.advanced-config summary {
+  cursor: pointer;
+  color: #868e96;
+  font-size: 12px;
+  user-select: none;
+}
+.advanced-config[open] summary { color: #ff8c42; }
+.form-group select {
+  width: 100%;
+  padding: 9px 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: #e8e8ed;
+  font-size: 13px;
+}
+.form-group select option { background: #1a1a2e; color: #e8e8ed; }

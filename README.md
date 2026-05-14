@@ -49,8 +49,8 @@
 
 - App ID
 - App Secret
-- 多维表格 Token（APP_TOKEN）
-- 数据表 ID（TABLE_ID）
+- 多维表格完整地址（推荐）
+- 或高级模式手动填写 APP_TOKEN / TABLE_ID
 
 然后点击：
 
