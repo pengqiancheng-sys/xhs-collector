@@ -246,7 +246,12 @@
     if (!state || typeof state !== 'object') return null;
     const detailMap = state?.note?.noteDetailMap || {};
     const keys = Object.keys(detailMap);
-    if (keys.length) return detailMap[keys[0]]?.note || detailMap[keys[0]] || null;
+    // 遍历所有 key，找到第一个有有效 note 对象的
+    for (const key of keys) {
+      const entry = detailMap[key];
+      const note = entry?.note || entry;
+      if (note && note.title && note.noteId) return note;
+    }
     return null;
   }
 
@@ -268,32 +273,35 @@
       const state = getXhsInitialState();
       const stateNote = findNoteInState(state);
       if (stateNote) {
-        const interact = stateNote.interact_info || stateNote.interaction || {};
+        // 小红书实际字段名: tagList, interactInfo, likedCount/collectedCount/commentCount (驼峰, 字符串)
+        const interact = stateNote.interactInfo || stateNote.interact_info || stateNote.interaction || {};
         domData = {
           title: stateNote.title || stateNote.display_title || normalize(document.title),
           author: stateNote.user?.nickname || stateNote.user?.nick_name || '',
           text: stateNote.desc || stateNote.content || '',
           images: [],
-          tags: (stateNote.tag_list || stateNote.tags || []).map(t => {
+          // tagList 是 [{id, name, type}] 格式
+          tags: ((stateNote.tagList || stateNote.tag_list || stateNote.tags) || []).map(t => {
             const v = String(typeof t === 'string' ? t : (t.name || t.tag_name || t.tagName || '')).trim().replace(/^#+/, '');
             return v ? '#' + v : '';
           }).filter(Boolean),
-          likes: parseCountText(interact.liked_count ?? interact.likedCount ?? stateNote.liked_count ?? 0),
-          collects: parseCountText(interact.collected_count ?? interact.collectedCount ?? stateNote.collected_count ?? 0),
-          comments: parseCountText(interact.comment_count ?? interact.commentCount ?? stateNote.comment_count ?? 0),
+          likes: parseCountText(interact.likedCount ?? interact.liked_count ?? interact.liked ?? 0),
+          collects: parseCountText(interact.collectedCount ?? interact.collected_count ?? interact.collected ?? 0),
+          comments: parseCountText(interact.commentCount ?? interact.comment_count ?? interact.comment ?? 0),
           publishTime: (() => {
-            const ts = stateNote.time || stateNote.create_time || stateNote.publish_time || 0;
+            const ts = stateNote.time || stateNote.createTime || stateNote.create_time || stateNote.publishTime || stateNote.publish_time || 0;
             const n = Number(ts);
-            return (n > 0 && n < 1000000000000) ? n * 1000 : n;
+            // 毫秒时间戳直接返回
+            return (n > 1000000000000) ? n : (n > 1000000000 ? n * 1000 : n);
           })(),
         };
-        (stateNote.image_list || stateNote.images_list || stateNote.images || []).forEach(item => {
-          const url = typeof item === 'string' ? item : (item.url || item.url_default || item.original || '');
+        (stateNote.imageList || stateNote.image_list || stateNote.images || []).forEach(item => {
+          const url = typeof item === 'string' ? item : (item.urlDefault || item.urlPre || item.url || item.url_default || item.original || '');
           if (url && url.startsWith('http') && !domData.images.includes(url)) domData.images.push(url);
         });
-        if (!domData.images.length && (stateNote.cover || (stateNote.image_list && stateNote.image_list[0]))) {
-          const cover = stateNote.cover || stateNote.image_list[0];
-          const url = typeof cover === 'string' ? cover : (cover.url || cover.url_default || '');
+        if (!domData.images.length && (stateNote.cover || (stateNote.imageList && stateNote.imageList[0]))) {
+          const cover = stateNote.cover || stateNote.imageList[0];
+          const url = typeof cover === 'string' ? cover : (cover.urlDefault || cover.urlPre || cover.url || cover.url_default || '');
           if (url && url.startsWith('http')) domData.images.push(url);
         }
       } else {
@@ -326,6 +334,7 @@
       collects: domData.collects || 0,
       comments: domData.comments || 0,
       publishTime: domData.publishTime || 0,
+      publishTimeText: domData.publishTime ? (() => { const d = new Date(domData.publishTime); const pad = n => String(n).padStart(2, '0'); return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); })() : '',
       apiInteraction: domData.likes > 0 ? { liked_count: domData.likes, collected_count: domData.collects, comment_count: domData.comments } : null,
       hasApiData: domData.likes > 0 || domData.collects > 0 || domData.comments > 0 || domData.publishTime > 0,
       collectedAt: new Date().toISOString(),
