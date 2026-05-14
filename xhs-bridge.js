@@ -84,32 +84,44 @@
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
-  function findNoteObject(root, depth = 0, seen = new Set()) {
-    if (!root || typeof root !== 'object' || depth > 6 || seen.has(root)) return null;
-    seen.add(root);
-    const hasTitle = root.title || root.display_title || root.displayTitle;
-    const hasContent = root.desc || root.content || root.note_id || root.noteId || root.id;
-    const hasInteract = root.interact_info || root.interactInfo || root.liked_count || root.likedCount;
-    if (hasTitle && (hasContent || hasInteract)) return root;
-    const preferred = ['note', 'note_detail', 'noteDetail', 'item', 'note_card', 'noteCard', 'feed', 'data'];
-    for (const k of preferred) {
-      const r = findNoteObject(root[k], depth + 1, seen);
-      if (r) return r;
-    }
-    for (const v of Object.values(root)) {
-      if (Array.isArray(v)) {
-        for (const item of v.slice(0, 20)) {
-          const r = findNoteObject(item, depth + 1, seen);
-          if (r) return r;
-        }
-      } else if (v && typeof v === 'object') {
-        const r = findNoteObject(v, depth + 1, seen);
-        if (r) return r;
+  function findNoteObject(root) {
+    if (!root || typeof root !== 'object') return null;
+    const d = root.data || root;
+    if (!d || typeof d !== 'object') return null;
+
+    // 优先按已知路径匹配
+    const candidates = [];
+    function push(c) { if (c && typeof c === 'object') candidates.push(c); }
+
+    // 笔记详情返回格式常见结构
+    push(d.note); push(d.note_detail); push(d.item);
+    push(d.feed); push(d.note_card); push(d.noteCard);
+    push(d.data?.note); push(d.data?.item);
+
+    // 搜索/列表返回格式
+    const items = d.items || d.feeds || d.notes || d.note_cards || d.noteCards || [];
+    if (Array.isArray(items)) items.slice(0, 100).forEach(item => {
+      push(item.note_card || item.noteCard || item.note || item);
+    });
+
+    // 递归查找
+    if (d.note_list) {
+      for (const item of (Array.isArray(d.note_list) ? d.note_list : [])) {
+        push(item.note || item);
       }
     }
+
+    for (const cand of candidates) {
+      // 必须有标题或内容才能确认是笔记对象
+      if ((cand.title || cand.display_title || cand.displayTitle || cand.desc || cand.content) && !cand.code) {
+        return cand;
+      }
+    }
+    // 兜底：尝试整个 data 本身
+    if ((d.title || d.display_title || d.displayTitle) && !d.code) return d;
+    if (d.note_id || d.noteId) return d;
     return null;
   }
-
   function extractNoteData(apiResult) {
     // 小红书 API 返回结构很多，这里递归寻找真正的笔记对象
     const d = apiResult?.data || apiResult;
@@ -179,7 +191,8 @@
   }
 
   function remember(record) {
-    if (!record?.url || (!record?.note && !record?.profile)) return;
+    if (!record?.url) return;
+    if (!record?.note && !record?.profile) return;
     const store = window[RESPONSE_STORE];
     store.push({
       url: String(record.url),

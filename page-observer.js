@@ -264,6 +264,7 @@
       collects: domData.collects || 0,
       comments: domData.comments || 0,
       publishTime: domData.publishTime || 0,
+      apiInteraction: null,
       hasApiData: false,
       collectedAt: new Date().toISOString(),
     };
@@ -296,6 +297,7 @@
           comments: n.interaction?.comment_count ?? lastPageInfo?.comments ?? 0,
           publishTime: n.publish_time || lastPageInfo?.publishTime || 0,
           publishTimeText: n.publish_time_text || lastPageInfo?.publishTimeText || '',
+          apiInteraction: n.interaction || lastPageInfo?.apiInteraction || null,
           hasApiData: true,
           apiNoteId: n.note_id || '',
           apiInteraction: n.interaction || null,

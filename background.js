@@ -649,6 +649,7 @@ async function capturePage(t) {
     interactionCollects: apiData?.interaction?.collected_count ?? pageInfo?.collects ?? 0,
     interactionComments: apiData?.interaction?.comment_count ?? pageInfo?.comments ?? 0,
   };
+  addLog('mapping', `📊 点赞${captureData.interactionLikes} 收藏${captureData.interactionCollects} 评论${captureData.interactionComments}`, 'info');
 
   await feishuWrite(captureData);
   addLog('feishu', `✅ ${title.substring(0, 30)}`, 'success');
