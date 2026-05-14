@@ -35,13 +35,16 @@
       'cfg-appId','cfg-appSecret','cfg-bitableUrl','cfg-appToken','cfg-tableId','cfg-tableSelect','cfg-tableName',
       'cfg-apiIntercept','cfg-domParse','cfg-imageUpload',
       'cfg-maxImages','cfg-collectInterval',
-      'btn-toggle-secret','btn-fetch-fields','btn-test-connection',
+      'btn-toggle-secret','btn-parse-url','btn-list-tables','btn-fetch-fields','btn-test-connection',
       'btn-auto-map','btn-add-default','btn-reset-config',
       'btn-export-config','btn-import-config','btn-save-all',
       'connection-result','save-status','mapping-list','defaults-list',
       'import-file','version-tag','about-version',
     ];
-    ids.forEach(id => { DOM[id] = document.getElementById(id); });
+    ids.forEach(id => {
+      DOM[id] = document.getElementById(id);
+      if (!DOM[id]) console.warn('missing element:', id);
+    });
   }
 
   async function loadConfig() {
