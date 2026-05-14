@@ -1,4 +1,4 @@
-// 前程智囊团 v4.0.4 — 可配置化架构
+// 前程智囊团 v4.0.5 — 可配置化架构
 // 所有飞书凭证、表信息、字段映射 均从 chrome.storage 动态读取
 
 const FEISHU_AUTH = 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal';
@@ -22,6 +22,7 @@ const DEFAULT_CONFIG = {
     sourceType: '选题来源',
     images: '素材图片',
     tags: '标签',
+    publishTime: '发布时间',
     interactionLikes: '点赞数',
     interactionCollects: '收藏数',
     interactionComments: '评论数',
@@ -66,7 +67,7 @@ let config = { ...DEFAULT_CONFIG };
   chrome.storage.onChanged.addListener(onStorageChange);
   setInterval(processQueue, 1000);
   initUpdate();
-  console.log('🚀 前程智囊团 v4.0 可配置版');
+  console.log('🚀 前程智囊团 v4.0.5 可配置版');
 })();
 
 async function loadConfig() {
@@ -254,12 +255,37 @@ async function feishuWrite(captureData) {
   const skipped = [];
   const converted = [];
 
+  const fieldAliases = {
+    tags: ['标签', '话题', '关键词'],
+    publishTime: ['发布时间', '发布日期', '发布于', '时间', '笔记时间'],
+    interactionLikes: ['点赞数', '点赞'],
+    interactionCollects: ['收藏数', '收藏'],
+    interactionComments: ['评论数', '评价数', '评论', '评价'],
+  };
+
+  function resolveField(dataKey, preferred) {
+    if (!allowed) return preferred;
+    if (preferred && allowed.has(preferred)) return preferred;
+    for (const name of fieldAliases[dataKey] || []) {
+      if (allowed.has(name)) return name;
+    }
+    return preferred;
+  }
+
   function canWrite(fieldName) {
     if (!fieldName) return false;
     if (!allowed) return true;
     const ok = allowed.has(fieldName);
     if (!ok) skipped.push(fieldName);
     return ok;
+  }
+
+  function formatTimestamp(ts) {
+    if (!ts) return '';
+    const d = new Date(Number(ts));
+    if (!Number.isFinite(d.getTime())) return '';
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
   function normalizeText(v, max = 15000) {
@@ -322,9 +348,15 @@ async function feishuWrite(captureData) {
     // 日期字段：支持毫秒时间戳，否则跳过
     if (type === 5) {
       const n = Number(rawValue);
-      if (Number.isFinite(n)) return { ok: true, value: n };
+      if (Number.isFinite(n) && n > 0) return { ok: true, value: n };
       converted.push(`${fieldName}: 非日期跳过`);
       return { ok: false };
+    }
+
+    // 发布时间写入非日期字段时，转成人可读时间
+    if (dataKey === 'publishTime') {
+      const txt = formatTimestamp(rawValue);
+      return txt ? { ok: true, value: txt } : { ok: false };
     }
 
     // 文本/其他字段：统一转字符串，避免 TextFieldConvFail
@@ -344,11 +376,13 @@ async function feishuWrite(captureData) {
   }
 
   // 字段映射：按目标字段类型转换后写入
-  for (const [dataKey, fieldName] of Object.entries(fm)) {
+  for (const [dataKey, mappedFieldName] of Object.entries(fm)) {
+    const fieldName = resolveField(dataKey, mappedFieldName);
     if (!fieldName) continue;
     let value = captureData[dataKey];
-    if (dataKey === 'tags' && Array.isArray(value) && value.length && fieldByName.get(fieldName)?.type !== 4) {
-      value = value.join(', ');
+    if (dataKey === 'tags' && Array.isArray(value) && value.length) {
+      value = value.map(t => { const v = String(t || '').trim().replace(/^#+/, ''); return v ? `#${v}` : ''; }).filter(Boolean);
+      if (fieldByName.get(fieldName)?.type !== 4) value = value.join(', ');
     }
     if (dataKey === 'interactionLikes' || dataKey === 'interactionCollects' || dataKey === 'interactionComments') {
       value = Number(value) || 0;
@@ -609,7 +643,8 @@ async function capturePage(t) {
     sourceUrl: sourceUrl || '',
     sourceType: '浏览器采集',
     images: fileTokens.length ? fileTokens : undefined,
-    tags: apiData?.tags || pageInfo?.tags || [],
+    tags: (apiData?.tags?.length ? apiData.tags : pageInfo?.tags || []).map(t => { const v = String(t || '').trim().replace(/^#+/, ''); return v ? `#${v}` : ''; }).filter(Boolean),
+    publishTime: apiData?.publish_time || pageInfo?.publishTime || 0,
     interactionLikes: apiData?.interaction?.liked_count ?? pageInfo?.likes ?? 0,
     interactionCollects: apiData?.interaction?.collected_count ?? pageInfo?.collects ?? 0,
     interactionComments: apiData?.interaction?.comment_count ?? pageInfo?.comments ?? 0,

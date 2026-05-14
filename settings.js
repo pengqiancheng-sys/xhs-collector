@@ -11,7 +11,8 @@
     { key: 'sourceUrl', label: '来源链接', desc: '笔记URL（超链接字段）' },
     { key: 'sourceType', label: '采集方式', desc: '浏览器采集 / 链接采集 / 批量采集' },
     { key: 'images', label: '素材图片', desc: '笔记图片（附件字段）' },
-    { key: 'tags', label: '标签', desc: '话题标签（逗号分隔）' },
+    { key: 'tags', label: '标签', desc: '话题标签（自动补 #）' },
+    { key: 'publishTime', label: '发布时间', desc: '小红书笔记发布时间' },
     { key: 'interactionLikes', label: '点赞数', desc: '互动数据 - 点赞' },
     { key: 'interactionCollects', label: '收藏数', desc: '互动数据 - 收藏' },
     { key: 'interactionComments', label: '评论数', desc: '互动数据 - 评论' },
@@ -338,9 +339,10 @@
         sourceType: ['选题来源', '采集来源', '来源类型', '采集方式', 'source'],
         images: ['素材图片', '图片', '附件', '配图', 'images', 'image'],
         tags: ['标签', '话题', '关键词', 'tags', 'tag'],
+        publishTime: ['发布时间', '发布日期', '发布于', '时间', '笔记时间', 'publishTime', 'publish_time'],
         interactionLikes: ['点赞数', '点赞', 'likes', 'like'],
         interactionCollects: ['收藏数', '收藏', 'collects', 'collect'],
-        interactionComments: ['评论数', '评论', 'comments', 'comment'],
+        interactionComments: ['评论数', '评价数', '评论', '评价', 'comments', 'comment'],
       };
 
       for (const [dataKey, candidates] of Object.entries(autoMapRules)) {

@@ -36,31 +36,114 @@
     try { return JSON.parse(s); } catch { return null; }
   }
 
+  function normalizeTag(t) {
+    const v = String(t || '').trim().replace(/^#+/, '');
+    return v ? `#${v}` : '';
+  }
+
+  function toNumber(v) {
+    if (v === undefined || v === null || v === '') return 0;
+    if (typeof v === 'number') return v;
+    let s = String(v).trim().replace(/,/g, '');
+    if (!s || s === '赞' || s === '收藏' || s === '评论') return 0;
+    const m = s.match(/[\d.]+/);
+    if (!m) return 0;
+    let n = Number(m[0]);
+    if (!Number.isFinite(n)) return 0;
+    if (s.includes('万')) n *= 10000;
+    if (s.toLowerCase().includes('k')) n *= 1000;
+    return Math.round(n);
+  }
+
+  function pick(obj, paths) {
+    for (const path of paths) {
+      let cur = obj;
+      for (const k of path.split('.')) cur = cur?.[k];
+      if (cur !== undefined && cur !== null && cur !== '') return cur;
+    }
+    return undefined;
+  }
+
+  function normalizeTimestamp(v) {
+    if (v === undefined || v === null || v === '') return 0;
+    if (typeof v === 'number') {
+      if (v > 1000000000000) return v;
+      if (v > 1000000000) return v * 1000;
+      return 0;
+    }
+    const s = String(v).trim();
+    if (/^\d+$/.test(s)) return normalizeTimestamp(Number(s));
+    const t = Date.parse(s.replace(/-/g, '/'));
+    return Number.isFinite(t) ? t : 0;
+  }
+
+  function formatTime(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function findNoteObject(root, depth = 0, seen = new Set()) {
+    if (!root || typeof root !== 'object' || depth > 6 || seen.has(root)) return null;
+    seen.add(root);
+    const hasTitle = root.title || root.display_title || root.displayTitle;
+    const hasContent = root.desc || root.content || root.note_id || root.noteId || root.id;
+    const hasInteract = root.interact_info || root.interactInfo || root.liked_count || root.likedCount;
+    if (hasTitle && (hasContent || hasInteract)) return root;
+    const preferred = ['note', 'note_detail', 'noteDetail', 'item', 'note_card', 'noteCard', 'feed', 'data'];
+    for (const k of preferred) {
+      const r = findNoteObject(root[k], depth + 1, seen);
+      if (r) return r;
+    }
+    for (const v of Object.values(root)) {
+      if (Array.isArray(v)) {
+        for (const item of v.slice(0, 20)) {
+          const r = findNoteObject(item, depth + 1, seen);
+          if (r) return r;
+        }
+      } else if (v && typeof v === 'object') {
+        const r = findNoteObject(v, depth + 1, seen);
+        if (r) return r;
+      }
+    }
+    return null;
+  }
+
   function extractNoteData(apiResult) {
-    // 小红书 API 返回的笔记数据有多种嵌套结构，向下兼容
+    // 小红书 API 返回结构很多，这里递归寻找真正的笔记对象
     const d = apiResult?.data || apiResult;
     if (!d || typeof d !== 'object') return null;
-    
-    const note = d.note || d.note_detail || d.item || d;
+    const note = findNoteObject(d) || d.note || d.note_detail || d.item || d;
     if (!note || typeof note !== 'object') return null;
 
+    const interact = note.interact_info || note.interactInfo || note.interaction || {};
+    const ts = normalizeTimestamp(pick(note, [
+      'time', 'timestamp', 'create_time', 'createTime', 'created_time', 'createdTime',
+      'publish_time', 'publishTime', 'publishTimeMs', 'last_update_time', 'lastUpdateTime'
+    ]) || pick(d, ['time', 'timestamp', 'create_time', 'createTime', 'publish_time', 'publishTime']));
+
     return {
-      note_id: note.note_id || note.id || '',
-      title: note.title || note.display_title || '',
-      desc: note.desc || note.content || '',
+      note_id: note.note_id || note.noteId || note.id || '',
+      title: note.title || note.display_title || note.displayTitle || '',
+      desc: note.desc || note.content || note.description || '',
       type: note.type || 'normal',
       author: {
-        user_id: note.user?.user_id || note.user?.id || d.user?.user_id || '',
-        nickname: note.user?.nickname || note.user?.nick_name || d.user?.nickname || '',
+        user_id: note.user?.user_id || note.user?.userId || note.user?.id || d.user?.user_id || '',
+        nickname: note.user?.nickname || note.user?.nick_name || note.user?.nickName || d.user?.nickname || '',
         avatar: note.user?.avatar || note.user?.images || d.user?.avatar || '',
       },
-      tags: (note.tag_list || note.tags || []).map(t => typeof t === 'string' ? t : (t.name || t.tag_name || '')),
+      tags: (note.tag_list || note.tagList || note.tags || [])
+        .map(t => normalizeTag(typeof t === 'string' ? t : (t.name || t.tag_name || t.tagName || '')))
+        .filter(Boolean),
       images: extractImages(note),
+      publish_time: ts,
+      publish_time_text: formatTime(ts),
       interaction: {
-        liked_count: note.interact_info?.liked_count || note.liked_count || 0,
-        collected_count: note.interact_info?.collected_count || note.collected_count || 0,
-        comment_count: note.interact_info?.comment_count || note.comment_count || 0,
-        shared_count: note.interact_info?.shared_count || note.shared_count || 0,
+        liked_count: toNumber(interact.liked_count ?? interact.likedCount ?? note.liked_count ?? note.likedCount ?? note.likes),
+        collected_count: toNumber(interact.collected_count ?? interact.collectedCount ?? note.collected_count ?? note.collectedCount ?? note.collects),
+        comment_count: toNumber(interact.comment_count ?? interact.commentCount ?? note.comment_count ?? note.commentCount ?? note.comments),
+        shared_count: toNumber(interact.shared_count ?? interact.sharedCount ?? note.shared_count ?? note.sharedCount ?? note.shares),
       },
       raw: d,
     };
@@ -96,7 +179,7 @@
   }
 
   function remember(record) {
-    if (!record?.url || !record?.result) return;
+    if (!record?.url || (!record?.note && !record?.profile)) return;
     const store = window[RESPONSE_STORE];
     store.push({
       url: String(record.url),
@@ -135,10 +218,11 @@
         const json = parseJSON(text);
         if (!json) return resp;
 
-        if (isNoteDetail(url)) {
+        {
           const note = extractNoteData(json);
           if (note) remember({ url, type: 'note', note });
-        } else if (isProfilePage(url)) {
+        }
+        if (isProfilePage(url)) {
           const profile = extractProfileData(json);
           if (profile) remember({ url, type: 'profile', profile });
         }
@@ -162,7 +246,7 @@
         if (!isXHSHost(url)) return;
         const json = parseJSON(this.responseText);
         if (!json) return;
-        if (isNoteDetail(url)) {
+        {
           const note = extractNoteData(json);
           if (note) remember({ url, type: 'note', note });
         }

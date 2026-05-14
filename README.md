@@ -76,7 +76,8 @@
 | tags | 标签 | 文本 |
 | interactionLikes | 点赞数 | 数字 |
 | interactionCollects | 收藏数 | 数字 |
-| interactionComments | 评论数 | 数字 |
+| interactionComments | 评论数/评价数 | 数字 |
+| publishTime | 发布时间 | 日期/文本 |
 
 ## 🏗️ 技术架构
 

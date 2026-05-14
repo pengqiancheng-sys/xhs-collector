@@ -6,6 +6,37 @@
   let urlWatchTimer = null;
 
   function normalize(s) { return String(s || '').trim(); }
+  function normalizeTag(t) {
+    const v = normalize(t).replace(/^#+/, '');
+    return v ? `#${v}` : '';
+  }
+  function parseCountText(s) {
+    const raw = normalize(s).replace(/,/g, '');
+    if (!raw || raw === '赞' || raw === '收藏' || raw === '评论') return 0;
+    const m = raw.match(/[\d.]+/);
+    if (!m) return 0;
+    let n = Number(m[0]);
+    if (!Number.isFinite(n)) return 0;
+    if (raw.includes('万')) n *= 10000;
+    if (raw.toLowerCase().includes('k')) n *= 1000;
+    return Math.round(n);
+  }
+  function parsePublishTimeText(s) {
+    const raw = normalize(s);
+    if (!raw) return 0;
+    const now = new Date();
+    if (/刚刚/.test(raw)) return now.getTime();
+    const min = raw.match(/(\d+)\s*分钟前/); if (min) return now.getTime() - Number(min[1]) * 60000;
+    const hour = raw.match(/(\d+)\s*小时前/); if (hour) return now.getTime() - Number(hour[1]) * 3600000;
+    const day = raw.match(/(\d+)\s*天前/); if (day) return now.getTime() - Number(day[1]) * 86400000;
+    const ymd = raw.match(/(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})/);
+    if (ymd) return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])).getTime();
+    const md = raw.match(/(\d{1,2})[-/.月](\d{1,2})/);
+    if (md) return new Date(now.getFullYear(), Number(md[1]) - 1, Number(md[2])).getTime();
+    const t = Date.parse(raw.replace(/-/g, '/'));
+    return Number.isFinite(t) ? t : 0;
+  }
+
 
   function getPlatformInfo() {
     const host = location.hostname.toLowerCase();
@@ -36,7 +67,7 @@
 
   // ====== 小红书深度 DOM 解析 ======
   function extractXhsDomData() {
-    const data = { title: '', author: '', text: '', images: [], tags: [] };
+    const data = { title: '', author: '', text: '', images: [], tags: [], likes: 0, collects: 0, comments: 0, publishTime: 0 };
 
     // 标题 - 多选择器兜底
     const titleSelectors = [
@@ -81,7 +112,7 @@
         // 提取话题标签
         const tagEls = el.querySelectorAll('a[href*="tag"], [class*="tag"], [class*="hash"]');
         tagEls.forEach(t => {
-          const tagText = normalize(t.textContent).replace(/^#/, '');
+          const tagText = normalizeTag(t.textContent);
           if (tagText && !data.tags.includes(tagText)) data.tags.push(tagText);
         });
         if (data.text) break;
@@ -127,8 +158,39 @@
       data.images.push(ogImg.content);
     }
 
+    // 互动数据兜底：优先从常见按钮/计数区域按文本抓取
+    const bodyText = normalize(document.body?.innerText || '');
+    const likeSelectors = ['[class*="like"] .count', '[class*="liked"] .count', '.interact-container [class*="like"]', '[aria-label*="赞"]'];
+    const collectSelectors = ['[class*="collect"] .count', '[class*="collect"]', '[aria-label*="收藏"]'];
+    const commentSelectors = ['[class*="comment"] .count', '.comments-el .count', '[aria-label*="评论"]'];
+    const pickCount = (sels, label) => {
+      for (const sel of sels) {
+        for (const el of document.querySelectorAll(sel)) {
+          const n = parseCountText(el.getAttribute('aria-label') || el.textContent);
+          if (n) return n;
+        }
+      }
+      const re = new RegExp(label + '\\s*([\\d.,万kK]+)|([\\d.,万kK]+)\\s*' + label);
+      const m = bodyText.match(re);
+      return m ? parseCountText(m[1] || m[2]) : 0;
+    };
+    data.likes = pickCount(likeSelectors, '赞');
+    data.collects = pickCount(collectSelectors, '收藏');
+    data.comments = pickCount(commentSelectors, '评论');
+
+    // 发布时间兜底
+    const timeSelectors = ['.date', '[class*="date"]', '.publish-time', '[class*="time"]', 'time'];
+    for (const sel of timeSelectors) {
+      for (const el of document.querySelectorAll(sel)) {
+        const ts = parsePublishTimeText(el.getAttribute('datetime') || el.textContent);
+        if (ts) { data.publishTime = ts; break; }
+      }
+      if (data.publishTime) break;
+    }
+
     // 去重
     data.images = [...new Set(data.images)];
+    data.tags = [...new Set(data.tags.filter(Boolean))];
 
     return data;
   }
@@ -198,6 +260,10 @@
       text: domData.text,
       images: [...new Set(domData.images)],
       tags: domData.tags || [],
+      likes: domData.likes || 0,
+      collects: domData.collects || 0,
+      comments: domData.comments || 0,
+      publishTime: domData.publishTime || 0,
       hasApiData: false,
       collectedAt: new Date().toISOString(),
     };
@@ -225,6 +291,11 @@
           text: n.desc || lastPageInfo?.text || '',
           images: n.images?.length ? n.images : lastPageInfo?.images || [],
           tags: n.tags?.length ? n.tags : lastPageInfo?.tags || [],
+          likes: n.interaction?.liked_count ?? lastPageInfo?.likes ?? 0,
+          collects: n.interaction?.collected_count ?? lastPageInfo?.collects ?? 0,
+          comments: n.interaction?.comment_count ?? lastPageInfo?.comments ?? 0,
+          publishTime: n.publish_time || lastPageInfo?.publishTime || 0,
+          publishTimeText: n.publish_time_text || lastPageInfo?.publishTimeText || '',
           hasApiData: true,
           apiNoteId: n.note_id || '',
           apiInteraction: n.interaction || null,
