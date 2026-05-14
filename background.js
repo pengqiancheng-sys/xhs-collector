@@ -1,4 +1,4 @@
-// 前程智囊团 v4.0 — 可配置化架构
+// 前程智囊团 v4.0.3 — 可配置化架构
 // 所有飞书凭证、表信息、字段映射 均从 chrome.storage 动态读取
 
 const FEISHU_AUTH = 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal';
@@ -239,16 +239,44 @@ async function feishuWrite(captureData) {
   const fm = config.fieldMapping || DEFAULT_CONFIG.fieldMapping;
   const defs = config.defaults || DEFAULT_CONFIG.defaults;
 
-  // 应用固定值
-  for (const [key, val] of Object.entries(defs)) {
-    fields[key] = val;
+  // 关键修复：写入前确保知道目标表真实字段，只写存在的字段，避免 FieldNameNotFound
+  let tableFields = Array.isArray(config.tableFields) ? config.tableFields : [];
+  if (!tableFields.length && config.appToken && config.tableId) {
+    const r = await fetchTableFields(config.appToken, config.tableId, config.appId, config.appSecret);
+    if (r.success) {
+      tableFields = r.fields || [];
+      config.tableFields = tableFields;
+      await saveConfig(config).catch(() => {});
+    }
+  }
+  const allowed = tableFields.length ? new Set(tableFields.map(f => f.name)) : null;
+  const skipped = [];
+
+  function canWrite(fieldName) {
+    if (!fieldName) return false;
+    if (!allowed) return true; // 兼容老配置：如果没有字段列表，只能尝试写
+    const ok = allowed.has(fieldName);
+    if (!ok) skipped.push(fieldName);
+    return ok;
   }
 
-  // 应用字段映射
+  function setField(fieldName, value) {
+    if (!canWrite(fieldName)) return;
+    if (value === undefined || value === null || value === '') return;
+    fields[fieldName] = value;
+  }
+
+  // 应用固定值：只写目标表真实存在的字段
+  for (const [key, val] of Object.entries(defs)) {
+    setField(key, val);
+  }
+
+  // 应用字段映射：只写用户映射且目标表真实存在的字段
   for (const [dataKey, fieldName] of Object.entries(fm)) {
     if (!fieldName) continue;
     const value = captureData[dataKey];
     if (value === undefined || value === null || value === '') continue;
+    if (!canWrite(fieldName)) continue;
 
     switch (dataKey) {
       case 'title':
@@ -264,14 +292,10 @@ async function feishuWrite(captureData) {
         fields[fieldName] = String(value);
         break;
       case 'images':
-        if (Array.isArray(value) && value.length) {
-          fields[fieldName] = value;
-        }
+        if (Array.isArray(value) && value.length) fields[fieldName] = value;
         break;
       case 'tags':
-        if (Array.isArray(value) && value.length) {
-          fields[fieldName] = value.join(', ');
-        }
+        if (Array.isArray(value) && value.length) fields[fieldName] = value.join(', ');
         break;
       case 'interactionLikes':
       case 'interactionCollects':
@@ -283,10 +307,19 @@ async function feishuWrite(captureData) {
     }
   }
 
-  // 确保标题至少有一个值
+  // 确保标题至少有一个值，但仍然必须是目标表存在字段
   const titleField = fm.title || '选题标题';
-  if (!fields[titleField] && captureData.title) {
+  if (!fields[titleField] && captureData.title && canWrite(titleField)) {
     fields[titleField] = String(captureData.title).substring(0, 5000);
+  }
+
+  const fieldCount = Object.keys(fields).length;
+  if (!fieldCount) {
+    throw new Error('没有可写入字段：请在设置页先读取字段，并完成字段映射');
+  }
+  if (skipped.length) {
+    const unique = [...new Set(skipped)].slice(0, 8).join('、');
+    addLog('mapping', `⚠️ 已跳过不存在字段：${unique}`, 'info');
   }
 
   const data = await feishuRequest(
