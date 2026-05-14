@@ -67,7 +67,7 @@ let config = { ...DEFAULT_CONFIG };
   chrome.storage.onChanged.addListener(onStorageChange);
   setInterval(processQueue, 1000);
   initUpdate();
-  console.log('🚀 前程智囊团 v4.0.10 可配置版');
+  console.log('🚀 前程智囊团 v4.0.11 可配置版');
 })();
 
 async function loadConfig() {
@@ -509,6 +509,54 @@ async function capturePage(t) {
 
   // 获取页面信息
   let pageInfo = {};
+  // 直接从 DOM 获取互动数据（RedBox 方式，最稳定）
+  let domStats = {};
+  try {
+    const r = await chrome.scripting.executeScript({
+      target: { tabId: t.tabId },
+      func: () => {
+        function parseCount(v) {
+          if (!v) return 0;
+          const s = String(v).trim().replace(/[\s,]/g, '').replace(/[^0-9.\u4e00-\u9fa5]/g, '');
+          if (!s) return 0;
+          if (s.includes('万')) { const n = parseFloat(s.replace('万', '')); return isNaN(n) ? 0 : Math.round(n * 10000); }
+          const n = parseFloat(s); return isNaN(n) ? 0 : Math.round(n);
+        }
+        function getDomTime() {
+          const sels = ['.date', '[class*="date"]', '.publish-time', '[class*="time"]', 'time', '.bottom-container .date'];
+          for (const sel of sels) {
+            const el = document.querySelector(sel);
+            if (!el) continue;
+            const raw = (el.textContent || '').trim();
+            if (!raw) continue;
+            const now = new Date();
+            const mm = raw.match(/(\d+)\s*分钟前/); if (mm) return now.getTime() - Number(mm[1]) * 60000;
+            const hh = raw.match(/(\d+)\s*小时前/); if (hh) return now.getTime() - Number(hh[1]) * 3600000;
+            const dd = raw.match(/(\d+)\s*天前/); if (dd) return now.getTime() - Number(dd[1]) * 86400000;
+            const ymd = raw.match(/(20\d{2})[-\/.年](\d{1,2})[-\/.月](\d{1,2})/);
+            if (ymd) return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])).getTime();
+            const md = raw.match(/(\d{1,2})[-\/.月](\d{1,2})/);
+            if (md) return new Date(new Date().getFullYear(), Number(md[1]) - 1, Number(md[2])).getTime();
+          }
+          return 0;
+        }
+        const likeEl = Array.from(document.querySelectorAll('.like-wrapper .count,[class*="like-wrapper"] .count,[class*="like"] .count'))
+          .find(el => !el.closest('[class*="comment"]'));
+        const collectEl = Array.from(document.querySelectorAll('.collect-wrapper .count,[class*="collect-wrapper"] .count,[class*="collect"] .count'))
+          .find(el => !el.closest('[class*="comment"]'));
+        const commentEl = Array.from(document.querySelectorAll('.chat-wrapper .count,.comment-wrapper .count,[class*="comment"] .count'))
+          .find(el => !el.closest('.comments-el'));
+        return {
+          likes: parseCount(likeEl?.textContent || ''),
+          collects: parseCount(collectEl?.textContent || ''),
+          comments: parseCount(commentEl?.textContent || ''),
+          time: getDomTime(),
+        };
+      },
+    });
+    if (r?.[0]?.result) domStats = r[0].result;
+  } catch(e) {}
+
   if (features.domParse !== false) {
     try { pageInfo = await chrome.tabs.sendMessage(t.tabId, { type: 'extract-page' }); } catch {}
   }
@@ -644,10 +692,10 @@ async function capturePage(t) {
     sourceType: '浏览器采集',
     images: fileTokens.length ? fileTokens : undefined,
     tags: (apiData?.tags?.length ? apiData.tags : pageInfo?.tags || []).map(t => { const v = String(t || '').trim().replace(/^#+/, ''); return v ? `#${v}` : ''; }).filter(Boolean),
-    publishTime: apiData?.publish_time || pageInfo?.publishTime || 0,
-    interactionLikes: apiData?.interaction?.liked_count ?? pageInfo?.likes ?? 0,
-    interactionCollects: apiData?.interaction?.collected_count ?? pageInfo?.collects ?? 0,
-    interactionComments: apiData?.interaction?.comment_count ?? pageInfo?.comments ?? 0,
+    publishTime: domStats.time || apiData?.publish_time || pageInfo?.publishTime || 0,
+    interactionLikes: domStats.likes || (apiData?.interaction?.liked_count ?? pageInfo?.likes ?? 0),
+    interactionCollects: domStats.collects || (apiData?.interaction?.collected_count ?? pageInfo?.collects ?? 0),
+    interactionComments: domStats.comments || (apiData?.interaction?.comment_count ?? pageInfo?.comments ?? 0),
   };
   addLog('mapping', `📊 点赞${captureData.interactionLikes} 收藏${captureData.interactionCollects} 评论${captureData.interactionComments}`, 'info');
 
@@ -800,6 +848,54 @@ function handleMessage(msg, sender, sendResponse) {
       case 'sidepanel:get-context': {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         let pageInfo = {};
+  // 直接从 DOM 获取互动数据（RedBox 方式，最稳定）
+  let domStats = {};
+  try {
+    const r = await chrome.scripting.executeScript({
+      target: { tabId: t.tabId },
+      func: () => {
+        function parseCount(v) {
+          if (!v) return 0;
+          const s = String(v).trim().replace(/[\s,]/g, '').replace(/[^0-9.\u4e00-\u9fa5]/g, '');
+          if (!s) return 0;
+          if (s.includes('万')) { const n = parseFloat(s.replace('万', '')); return isNaN(n) ? 0 : Math.round(n * 10000); }
+          const n = parseFloat(s); return isNaN(n) ? 0 : Math.round(n);
+        }
+        function getDomTime() {
+          const sels = ['.date', '[class*="date"]', '.publish-time', '[class*="time"]', 'time', '.bottom-container .date'];
+          for (const sel of sels) {
+            const el = document.querySelector(sel);
+            if (!el) continue;
+            const raw = (el.textContent || '').trim();
+            if (!raw) continue;
+            const now = new Date();
+            const mm = raw.match(/(\d+)\s*分钟前/); if (mm) return now.getTime() - Number(mm[1]) * 60000;
+            const hh = raw.match(/(\d+)\s*小时前/); if (hh) return now.getTime() - Number(hh[1]) * 3600000;
+            const dd = raw.match(/(\d+)\s*天前/); if (dd) return now.getTime() - Number(dd[1]) * 86400000;
+            const ymd = raw.match(/(20\d{2})[-\/.年](\d{1,2})[-\/.月](\d{1,2})/);
+            if (ymd) return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])).getTime();
+            const md = raw.match(/(\d{1,2})[-\/.月](\d{1,2})/);
+            if (md) return new Date(new Date().getFullYear(), Number(md[1]) - 1, Number(md[2])).getTime();
+          }
+          return 0;
+        }
+        const likeEl = Array.from(document.querySelectorAll('.like-wrapper .count,[class*="like-wrapper"] .count,[class*="like"] .count'))
+          .find(el => !el.closest('[class*="comment"]'));
+        const collectEl = Array.from(document.querySelectorAll('.collect-wrapper .count,[class*="collect-wrapper"] .count,[class*="collect"] .count'))
+          .find(el => !el.closest('[class*="comment"]'));
+        const commentEl = Array.from(document.querySelectorAll('.chat-wrapper .count,.comment-wrapper .count,[class*="comment"] .count'))
+          .find(el => !el.closest('.comments-el'));
+        return {
+          likes: parseCount(likeEl?.textContent || ''),
+          collects: parseCount(collectEl?.textContent || ''),
+          comments: parseCount(commentEl?.textContent || ''),
+          time: getDomTime(),
+        };
+      },
+    });
+    if (r?.[0]?.result) domStats = r[0].result;
+  } catch(e) {}
+
         if (tab?.id) { try { pageInfo = await chrome.tabs.sendMessage(tab.id, { type: 'extract-page' }); } catch {} }
         const up = (await chrome.storage.local.get(['updateState'])).updateState || {};
         sendResponse({
