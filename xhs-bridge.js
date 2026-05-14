@@ -190,33 +190,79 @@
     };
   }
 
-  function remember(record) {
-    if (!record?.url) return;
-    if (!record?.note && !record?.profile) return;
-    const store = window[RESPONSE_STORE];
-    store.push({
-      url: String(record.url),
-      type: record.type || 'note',
-      profile: record.profile || null,
-      note: record.note || null,
-      capturedAt: Date.now(),
-    });
-    while (store.length > MAX_RESPONSES) store.shift();
+  function findNoteInResponse(result) {
+    if (!result || typeof result !== 'object') return null;
+    const d = result.data || result;
+    if (!d || typeof d !== 'object') return null;
+    const candidates = [];
+    const pushIfObj = (v) => { if (v && typeof v === 'object') candidates.push(v); };
+    pushIfObj(d.note); pushIfObj(d.note_detail); pushIfObj(d.item);
+    pushIfObj(d.feed); pushIfObj(d.note_card);
+    if (d.data) { pushIfObj(d.data.note); pushIfObj(d.data.item); }
+    const items = d.items || d.feeds || d.note_cards || [];
+    if (Array.isArray(items)) for (const item of items.slice(0, 50)) pushIfObj(item.note_card || item.noteCard || item.note || item);
+    for (const c of candidates) if (c.title || c.display_title || c.desc || c.note_id) return c;
+    if ((d.note_id || d.id) && (d.title || d.display_title)) return d;
+    return null;
+  }
 
-    // 广播给 page-observer
+  function parseCountText(value) {
+    if (!value) return 0;
+    const text = String(value).trim().replace(/[\s,]/g, '').replace(/[^0-9.\u4e00-\u9fa5]/g, '');
+    if (!text) return 0;
+    if (text.includes('万')) { const n = parseFloat(text.replace('万', '')); return isNaN(n) ? 0 : Math.round(n * 10000); }
+    const n = parseFloat(text);
+    return isNaN(n) ? 0 : Math.round(n);
+  }
+
+  function formatTimestamp(ts) {
+    if (!ts) return '';
+    const d = new Date(Number(ts));
+    if (isNaN(d.getTime())) return '';
+    const pad = n => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  function extractNoteFromResponse(result) {
+    const note = findNoteInResponse(result);
+    if (!note) return null;
+    const interact = note.interact_info || note.interaction || {};
+    let ts = 0;
+    for (const f of ['time','timestamp','create_time','createTime','publish_time','publishTime','last_update_time','lastUpdateTime']) {
+      if (note[f] != null) { const n = Number(note[f]); if (n > 0) { ts = n > 1000000000000 ? n : n * 1000; break; } }
+    }
+    return {
+      note_id: note.note_id || note.noteId || note.id || '',
+      title: note.title || note.display_title || note.displayTitle || '',
+      desc: note.desc || note.content || '',
+      author: { nickname: note.user?.nickname || note.user?.nick_name || note.user?.nickName || '' },
+      tags: (note.tag_list || note.tagList || note.tags || []).map(t => {
+        const v = String(typeof t === 'string' ? t : (t.name || t.tag_name || t.tagName || '')).trim().replace(/^#+/, '');
+        return v ? '#' + v : '';
+      }).filter(Boolean),
+      images: extractImages(note),
+      publish_time: ts,
+      publish_time_text: formatTimestamp(ts),
+      interaction: {
+        liked_count: parseCountText(interact.liked_count ?? interact.likedCount ?? note.liked_count ?? note.likedCount ?? note.likes ?? 0),
+        collected_count: parseCountText(interact.collected_count ?? interact.collectedCount ?? note.collected_count ?? note.collectedCount ?? note.collects ?? 0),
+        comment_count: parseCountText(interact.comment_count ?? interact.commentCount ?? note.comment_count ?? note.commentCount ?? note.comments ?? 0),
+      },
+    };
+  }
+
+  function remember(record) {
+    if (!record?.url || !record?.result) return;
+    const extracted = extractNoteFromResponse(record.result);
+    const store = window[RESPONSE_STORE];
+    store.push({ url: String(record.url), type: 'note', note: extracted, capturedAt: Date.now() });
+    while (store.length > MAX_RESPONSES) store.shift();
     window.postMessage({
       source: 'qiancheng-xhs-bridge',
       type: 'xhs-api-response',
-      payload: {
-        url: record.url,
-        noteType: record.type,
-        note: record.note,
-        profile: record.profile,
-        capturedAt: Date.now(),
-      },
+      payload: { url: record.url, noteType: 'note', note: extracted, capturedAt: Date.now() },
     }, '*');
   }
-
   // 劫持 fetch
   const nativeFetch = window.fetch;
   if (typeof nativeFetch === 'function') {
@@ -231,10 +277,7 @@
         const json = parseJSON(text);
         if (!json) return resp;
 
-        {
-          const note = extractNoteData(json);
-          if (note) remember({ url, type: 'note', note });
-        }
+        remember({ url, type: 'note', result: json });
         if (isProfilePage(url)) {
           const profile = extractProfileData(json);
           if (profile) remember({ url, type: 'profile', profile });
@@ -259,10 +302,7 @@
         if (!isXHSHost(url)) return;
         const json = parseJSON(this.responseText);
         if (!json) return;
-        {
-          const note = extractNoteData(json);
-          if (note) remember({ url, type: 'note', note });
-        }
+        remember({ url, type: 'note', result: json });
       });
       return origSend.apply(this, arguments);
     };
