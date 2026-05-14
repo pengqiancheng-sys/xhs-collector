@@ -229,13 +229,76 @@
     return data;
   }
 
+  function getXhsInitialState() {
+    try {
+      const scripts = document.querySelectorAll('script');
+      for (const script of scripts) {
+        const text = script.textContent || '';
+        if (!text.includes('window.__INITIAL_STATE__=')) continue;
+        const jsonText = text.replace('window.__INITIAL_STATE__=', '').replace(/undefined/g, 'null').replace(/;$/, '');
+        return JSON.parse(jsonText);
+      }
+    } catch {}
+    return null;
+  }
+
+  function findNoteInState(state) {
+    if (!state || typeof state !== 'object') return null;
+    const detailMap = state?.note?.noteDetailMap || {};
+    const keys = Object.keys(detailMap);
+    if (keys.length) return detailMap[keys[0]]?.note || detailMap[keys[0]] || null;
+    return null;
+  }
+
+  function parseCountText(value) {
+    if (!value) return 0;
+    const text = String(value).trim().replace(/[\s,]/g, '').replace(/[^0-9.\u4e00-\u9fa5]/g, '');
+    if (!text) return 0;
+    if (text.includes('万')) { const n = parseFloat(text.replace('万', '')); return isNaN(n) ? 0 : Math.round(n * 10000); }
+    const n = parseFloat(text);
+    return isNaN(n) ? 0 : Math.round(n);
+  }
+
   function buildPageInfo() {
     const platform = getPlatformInfo();
     const pageType = getPageType();
     let domData;
 
     if (platform.platform === 'xhs' && pageType === 'note') {
-      domData = extractXhsDomData();
+      const state = getXhsInitialState();
+      const stateNote = findNoteInState(state);
+      if (stateNote) {
+        const interact = stateNote.interact_info || stateNote.interaction || {};
+        domData = {
+          title: stateNote.title || stateNote.display_title || normalize(document.title),
+          author: stateNote.user?.nickname || stateNote.user?.nick_name || '',
+          text: stateNote.desc || stateNote.content || '',
+          images: [],
+          tags: (stateNote.tag_list || stateNote.tags || []).map(t => {
+            const v = String(typeof t === 'string' ? t : (t.name || t.tag_name || t.tagName || '')).trim().replace(/^#+/, '');
+            return v ? '#' + v : '';
+          }).filter(Boolean),
+          likes: parseCountText(interact.liked_count ?? interact.likedCount ?? stateNote.liked_count ?? 0),
+          collects: parseCountText(interact.collected_count ?? interact.collectedCount ?? stateNote.collected_count ?? 0),
+          comments: parseCountText(interact.comment_count ?? interact.commentCount ?? stateNote.comment_count ?? 0),
+          publishTime: (() => {
+            const ts = stateNote.time || stateNote.create_time || stateNote.publish_time || 0;
+            const n = Number(ts);
+            return (n > 0 && n < 1000000000000) ? n * 1000 : n;
+          })(),
+        };
+        (stateNote.image_list || stateNote.images_list || stateNote.images || []).forEach(item => {
+          const url = typeof item === 'string' ? item : (item.url || item.url_default || item.original || '');
+          if (url && url.startsWith('http') && !domData.images.includes(url)) domData.images.push(url);
+        });
+        if (!domData.images.length && (stateNote.cover || (stateNote.image_list && stateNote.image_list[0]))) {
+          const cover = stateNote.cover || stateNote.image_list[0];
+          const url = typeof cover === 'string' ? cover : (cover.url || cover.url_default || '');
+          if (url && url.startsWith('http')) domData.images.push(url);
+        }
+      } else {
+        domData = extractXhsDomData();
+      }
     } else if (platform.platform === 'youtube' && pageType === 'video') {
       domData = extractYoutubeDomData();
     } else {
@@ -245,7 +308,6 @@
         text: normalize(document.querySelector('meta[name="description"]')?.content || '').substring(0, 500),
         images: [],
       };
-      // 通用网页 og:image
       const ogImg = document.querySelector('meta[property="og:image"]');
       if (ogImg) domData.images.push(ogImg.content);
     }
@@ -256,16 +318,16 @@
       pageType,
       url: location.href,
       title: domData.title || normalize(document.title),
-      author: domData.author,
-      text: domData.text,
+      author: domData.author || '',
+      text: domData.text || '',
       images: [...new Set(domData.images)],
       tags: domData.tags || [],
       likes: domData.likes || 0,
       collects: domData.collects || 0,
       comments: domData.comments || 0,
       publishTime: domData.publishTime || 0,
-      apiInteraction: null,
-      hasApiData: false,
+      apiInteraction: domData.likes > 0 ? { liked_count: domData.likes, collected_count: domData.collects, comment_count: domData.comments } : null,
+      hasApiData: domData.likes > 0 || domData.collects > 0 || domData.comments > 0 || domData.publishTime > 0,
       collectedAt: new Date().toISOString(),
     };
   }
