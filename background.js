@@ -67,7 +67,7 @@ let config = { ...DEFAULT_CONFIG };
   chrome.storage.onChanged.addListener(onStorageChange);
   setInterval(processQueue, 1000);
   initUpdate();
-  console.log('🚀 前程智囊团 v4.0.9 可配置版');
+  console.log('🚀 前程智囊团 v4.0.10 可配置版');
 })();
 
 async function loadConfig() {

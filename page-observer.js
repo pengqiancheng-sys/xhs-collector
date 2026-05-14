@@ -264,52 +264,86 @@
     return isNaN(n) ? 0 : Math.round(n);
   }
 
+  function getXhsInitialState() {
+    try {
+      const scripts = document.querySelectorAll('script');
+      for (const script of scripts) {
+        const text = script.textContent || '';
+        if (!text.includes('window.__INITIAL_STATE__=')) continue;
+        const jsonText = text.replace('window.__INITIAL_STATE__=', '').replace(/undefined/g, 'null').replace(/;$/, '');
+        return JSON.parse(jsonText);
+      }
+    } catch(e) {}
+    return null;
+  }
+
+  function findNoteInState(state) {
+    if (!state || typeof state !== 'object') return null;
+    const detailMap = state?.note?.noteDetailMap || {};
+    const keys = Object.keys(detailMap);
+    for (const key of keys) {
+      const entry = detailMap[key];
+      const note = entry?.note || entry;
+      if (note && note.title && note.noteId) return note;
+    }
+    return null;
+  }
+
+  function parseCountText(value) {
+    if (!value) return 0;
+    const text = String(value).trim().replace(/[\s,]/g, '').replace(/[^0-9.一-龥]/g, '');
+    if (!text) return 0;
+    if (text.includes('万')) { const n = parseFloat(text.replace('万', '')); return isNaN(n) ? 0 : Math.round(n * 10000); }
+    const n = parseFloat(text);
+    return isNaN(n) ? 0 : Math.round(n);
+  }
+
   function buildPageInfo() {
     const platform = getPlatformInfo();
     const pageType = getPageType();
-    let domData;
+    let domData = null;
 
-    if (platform.platform === 'xhs' && pageType === 'note') {
+    // 优先从 __INITIAL_STATE__ 获取（最准最全，不依赖 pageType 判断）
+    if (platform.platform === 'xhs') {
       const state = getXhsInitialState();
       const stateNote = findNoteInState(state);
       if (stateNote) {
-        // 小红书实际字段名: tagList, interactInfo, likedCount/collectedCount/commentCount (驼峰, 字符串)
         const interact = stateNote.interactInfo || stateNote.interact_info || stateNote.interaction || {};
         domData = {
           title: stateNote.title || stateNote.display_title || normalize(document.title),
           author: stateNote.user?.nickname || stateNote.user?.nick_name || '',
           text: stateNote.desc || stateNote.content || '',
           images: [],
-          // tagList 是 [{id, name, type}] 格式
-          tags: ((stateNote.tagList || stateNote.tag_list || stateNote.tags) || []).map(t => {
+          tags: ((stateNote.tagList || stateNote.tag_list || stateNote.tags) || []).map(function(t) {
             const v = String(typeof t === 'string' ? t : (t.name || t.tag_name || t.tagName || '')).trim().replace(/^#+/, '');
             return v ? '#' + v : '';
           }).filter(Boolean),
           likes: parseCountText(interact.likedCount ?? interact.liked_count ?? interact.liked ?? 0),
           collects: parseCountText(interact.collectedCount ?? interact.collected_count ?? interact.collected ?? 0),
           comments: parseCountText(interact.commentCount ?? interact.comment_count ?? interact.comment ?? 0),
-          publishTime: (() => {
+          publishTime: (function() {
             const ts = stateNote.time || stateNote.createTime || stateNote.create_time || stateNote.publishTime || stateNote.publish_time || 0;
             const n = Number(ts);
-            // 毫秒时间戳直接返回
             return (n > 1000000000000) ? n : (n > 1000000000 ? n * 1000 : n);
           })(),
         };
-        (stateNote.imageList || stateNote.image_list || stateNote.images || []).forEach(item => {
+        const imgList = stateNote.imageList || stateNote.image_list || stateNote.images || [];
+        imgList.forEach(function(item) {
           const url = typeof item === 'string' ? item : (item.urlDefault || item.urlPre || item.url || item.url_default || item.original || '');
-          if (url && url.startsWith('http') && !domData.images.includes(url)) domData.images.push(url);
+          if (url && url.startsWith('http') && domData.images.indexOf(url) === -1) domData.images.push(url);
         });
-        if (!domData.images.length && (stateNote.cover || (stateNote.imageList && stateNote.imageList[0]))) {
-          const cover = stateNote.cover || stateNote.imageList[0];
-          const url = typeof cover === 'string' ? cover : (cover.urlDefault || cover.urlPre || cover.url || cover.url_default || '');
-          if (url && url.startsWith('http')) domData.images.push(url);
-        }
-      } else {
-        domData = extractXhsDomData();
       }
-    } else if (platform.platform === 'youtube' && pageType === 'video') {
+    }
+
+    if (!domData && platform.platform === 'xhs' && pageType === 'note') {
+      domData = extractXhsDomData();
+    }
+
+    if (!domData && platform.platform === 'youtube' && pageType === 'video') {
       domData = extractYoutubeDomData();
-    } else {
+    }
+
+    if (!domData) {
       domData = {
         title: normalize(document.title),
         author: normalize(document.querySelector('meta[name="author"]')?.content || location.hostname),
@@ -334,13 +368,12 @@
       collects: domData.collects || 0,
       comments: domData.comments || 0,
       publishTime: domData.publishTime || 0,
-      publishTimeText: domData.publishTime ? (() => { const d = new Date(domData.publishTime); const pad = n => String(n).padStart(2, '0'); return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); })() : '',
-      apiInteraction: domData.likes > 0 ? { liked_count: domData.likes, collected_count: domData.collects, comment_count: domData.comments } : null,
+      publishTimeText: domData.publishTime ? (function() { const d = new Date(domData.publishTime); const pad = n => String(n).padStart(2, '0'); return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); })() : '',
+      apiInteraction: domData.likes > 0 ? { likedCount: domData.likes, collectedCount: domData.collects, commentCount: domData.comments } : null,
       hasApiData: domData.likes > 0 || domData.collects > 0 || domData.comments > 0 || domData.publishTime > 0,
       collectedAt: new Date().toISOString(),
     };
   }
-
   function emit() {
     const info = buildPageInfo();
     if (JSON.stringify(info) === JSON.stringify(lastPageInfo)) return;
