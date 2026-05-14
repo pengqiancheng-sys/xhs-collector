@@ -1,4 +1,4 @@
-// 前程智囊团 v4.0.3 — 可配置化架构
+// 前程智囊团 v4.0.4 — 可配置化架构
 // 所有飞书凭证、表信息、字段映射 均从 chrome.storage 动态读取
 
 const FEISHU_AUTH = 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal';
@@ -239,7 +239,7 @@ async function feishuWrite(captureData) {
   const fm = config.fieldMapping || DEFAULT_CONFIG.fieldMapping;
   const defs = config.defaults || DEFAULT_CONFIG.defaults;
 
-  // 关键修复：写入前确保知道目标表真实字段，只写存在的字段，避免 FieldNameNotFound
+  // 写入前确保知道目标表真实字段和字段类型
   let tableFields = Array.isArray(config.tableFields) ? config.tableFields : [];
   if (!tableFields.length && config.appToken && config.tableId) {
     const r = await fetchTableFields(config.appToken, config.tableId, config.appId, config.appSecret);
@@ -249,68 +249,117 @@ async function feishuWrite(captureData) {
       await saveConfig(config).catch(() => {});
     }
   }
+  const fieldByName = new Map(tableFields.map(f => [f.name, f]));
   const allowed = tableFields.length ? new Set(tableFields.map(f => f.name)) : null;
   const skipped = [];
+  const converted = [];
 
   function canWrite(fieldName) {
     if (!fieldName) return false;
-    if (!allowed) return true; // 兼容老配置：如果没有字段列表，只能尝试写
+    if (!allowed) return true;
     const ok = allowed.has(fieldName);
     if (!ok) skipped.push(fieldName);
     return ok;
   }
 
-  function setField(fieldName, value) {
+  function normalizeText(v, max = 15000) {
+    if (v === undefined || v === null) return '';
+    if (typeof v === 'string') return v.substring(0, max);
+    if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+    if (Array.isArray(v)) return v.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(', ').substring(0, max);
+    if (v.link) return String(v.link).substring(0, max);
+    try { return JSON.stringify(v).substring(0, max); } catch { return String(v).substring(0, max); }
+  }
+
+  function formatForField(fieldName, dataKey, rawValue) {
+    if (rawValue === undefined || rawValue === null || rawValue === '') return { ok: false };
+    const field = fieldByName.get(fieldName);
+    const type = field?.type;
+
+    // 没有字段类型信息时，沿用旧格式
+    if (!type) return { ok: true, value: rawValue };
+
+    // 附件字段：只有图片 file_token 可以写
+    if (type === 17) {
+      if (dataKey === 'images' && Array.isArray(rawValue) && rawValue.length) return { ok: true, value: rawValue };
+      converted.push(`${fieldName}: 非附件数据跳过`);
+      return { ok: false };
+    }
+
+    // 非附件字段不写 file_token 对象，避免类型转换失败
+    if (dataKey === 'images') {
+      converted.push(`${fieldName}: 非附件字段，图片跳过`);
+      return { ok: false };
+    }
+
+    // 超链接字段
+    if (type === 15) {
+      const url = typeof rawValue === 'string' ? rawValue : (rawValue.link || '');
+      if (!url) return { ok: false };
+      return { ok: true, value: { link: url, text: (captureData.title || url).substring(0, 50) } };
+    }
+
+    // 数字字段
+    if (type === 2) {
+      const n = Number(rawValue);
+      if (Number.isFinite(n)) return { ok: true, value: n };
+      converted.push(`${fieldName}: 非数字跳过`);
+      return { ok: false };
+    }
+
+    // 多选字段
+    if (type === 4) {
+      if (Array.isArray(rawValue)) return { ok: true, value: rawValue.map(String).filter(Boolean) };
+      return { ok: true, value: [String(rawValue)] };
+    }
+
+    // 单选字段
+    if (type === 3) return { ok: true, value: String(rawValue) };
+
+    // 复选框字段
+    if (type === 7) return { ok: true, value: Boolean(rawValue) };
+
+    // 日期字段：支持毫秒时间戳，否则跳过
+    if (type === 5) {
+      const n = Number(rawValue);
+      if (Number.isFinite(n)) return { ok: true, value: n };
+      converted.push(`${fieldName}: 非日期跳过`);
+      return { ok: false };
+    }
+
+    // 文本/其他字段：统一转字符串，避免 TextFieldConvFail
+    return { ok: true, value: normalizeText(rawValue, dataKey === 'text' ? 15000 : 5000) };
+  }
+
+  function setField(fieldName, dataKey, rawValue) {
     if (!canWrite(fieldName)) return;
-    if (value === undefined || value === null || value === '') return;
-    fields[fieldName] = value;
+    const r = formatForField(fieldName, dataKey, rawValue);
+    if (!r.ok) return;
+    fields[fieldName] = r.value;
   }
 
-  // 应用固定值：只写目标表真实存在的字段
+  // 默认值：按字段类型转换后写入
   for (const [key, val] of Object.entries(defs)) {
-    setField(key, val);
+    setField(key, 'default', val);
   }
 
-  // 应用字段映射：只写用户映射且目标表真实存在的字段
+  // 字段映射：按目标字段类型转换后写入
   for (const [dataKey, fieldName] of Object.entries(fm)) {
     if (!fieldName) continue;
-    const value = captureData[dataKey];
-    if (value === undefined || value === null || value === '') continue;
-    if (!canWrite(fieldName)) continue;
-
-    switch (dataKey) {
-      case 'title':
-      case 'text':
-      case 'author':
-      case 'platform':
-        fields[fieldName] = String(value).substring(0, dataKey === 'text' ? 15000 : 5000);
-        break;
-      case 'sourceUrl':
-        fields[fieldName] = { link: String(value), text: (captureData.title || captureData.text || '').substring(0, 50) };
-        break;
-      case 'sourceType':
-        fields[fieldName] = String(value);
-        break;
-      case 'images':
-        if (Array.isArray(value) && value.length) fields[fieldName] = value;
-        break;
-      case 'tags':
-        if (Array.isArray(value) && value.length) fields[fieldName] = value.join(', ');
-        break;
-      case 'interactionLikes':
-      case 'interactionCollects':
-      case 'interactionComments':
-        fields[fieldName] = Number(value) || 0;
-        break;
-      default:
-        fields[fieldName] = String(value);
+    let value = captureData[dataKey];
+    if (dataKey === 'tags' && Array.isArray(value) && value.length && fieldByName.get(fieldName)?.type !== 4) {
+      value = value.join(', ');
     }
+    if (dataKey === 'interactionLikes' || dataKey === 'interactionCollects' || dataKey === 'interactionComments') {
+      value = Number(value) || 0;
+    }
+    setField(fieldName, dataKey, value);
   }
 
-  // 确保标题至少有一个值，但仍然必须是目标表存在字段
+  // 确保标题至少有一个值
   const titleField = fm.title || '选题标题';
-  if (!fields[titleField] && captureData.title && canWrite(titleField)) {
-    fields[titleField] = String(captureData.title).substring(0, 5000);
+  if (!fields[titleField] && captureData.title) {
+    setField(titleField, 'title', captureData.title);
   }
 
   const fieldCount = Object.keys(fields).length;
@@ -320,6 +369,10 @@ async function feishuWrite(captureData) {
   if (skipped.length) {
     const unique = [...new Set(skipped)].slice(0, 8).join('、');
     addLog('mapping', `⚠️ 已跳过不存在字段：${unique}`, 'info');
+  }
+  if (converted.length) {
+    const msg = [...new Set(converted)].slice(0, 3).join('；');
+    addLog('mapping', `ℹ️ 字段类型适配：${msg}`, 'info');
   }
 
   const data = await feishuRequest(
