@@ -29,10 +29,12 @@
     await loadConfig();
     renderAll();
     setupEvents();
+    setupFeishuBridge();
     setupPromptTab();
     setupWizard();
     setupUpdateUI();
     refreshWizard();
+    await refreshDetected();
     // 支持外部带 hash 直达任意标签：settings.html#feishu / #mapping / #features / #prompt / #about
     const hashTab = (location.hash || '').replace(/^#/, '');
     if (hashTab && document.getElementById('tab-' + hashTab)) switchTab(hashTab);
@@ -52,6 +54,8 @@
       'btn-copy-perms','btn-verify-cred','cred-result','btn-quick-bind',
       'btn-health-check','health-list',
       'ws-1','ws-2','ws-3','btn-check-update','update-box','update-detail','cur-version',
+      'btn-open-platform','btn-probe-feishu',
+      'feishu-detected','feishu-detected-list','btn-open-app-baseinfo','btn-clear-detected',
     ];
     ids.forEach(id => {
       DOM[id] = document.getElementById(id);
@@ -161,7 +165,7 @@
           <span class="mapping-arrow">→</span>
           <div class="mapping-field-select">
             <select data-map-key="${cf.key}">
-              <option value="" style="color:#868e96;">-- 不映射 --</option>
+              <option value="" style="color:#6b7280;">-- 不映射 --</option>
               ${options}
               ${customOption}
             </select>
@@ -182,7 +186,7 @@
         <input class="field-value" value="${escAttr(val)}" placeholder="默认值" data-default-val="${escAttr(val)}">
         <button class="btn-remove-default" title="删除">✕</button>
       </div>
-    `).join('') || '<div style="color:#868e96;font-size:12px;padding:8px 0;">暂无默认值</div>';
+    `).join('') || '<div style="color:#6b7280;font-size:12px;padding:8px 0;">暂无默认值</div>';
   }
 
   function getMappedDataKey(fieldName) {
@@ -510,9 +514,140 @@
       n.classList.remove('active', 'done');
       if (cls) n.classList.add(cls);
     };
-    mark('ws-1', 'done');
-    mark('ws-2', hasCred ? 'done' : 'active');
+    // 步骤 1（建应用）发生在插件之外、无法探测，因此只有在"已有凭证"时才推断为已完成；
+    // 否则保持在"当前"态，避免一进来就显示绿色对勾误导用户跳过建应用。
+    mark('ws-1', hasCred ? 'done' : 'active');
+    mark('ws-2', hasCred ? (hasTable ? 'done' : 'active') : '');
     mark('ws-3', hasTable ? 'done' : (hasCred ? 'active' : ''));
+  }
+
+  // ===== 飞书开放平台桥接：直接选用已有应用 =====
+  // 设计说明：飞书官方「获取企业应用列表」接口需要 tenant_access_token，
+  // 而拿 token 又必须先有 App ID/Secret —— 死循环，所以在用户填凭证前
+  // 插件无法通过 API 列出应用。改为让内容脚本(feishu-bridge.js)在用户
+  // 已经登录的开发者后台页面里读 DOM，把应用回传过来。
+  const FEISHU_APP_URL = 'https://open.feishu.cn/app';
+  const APP_ID_RE = /cli_[A-Za-z0-9]{10,32}/;
+
+  function appBaseinfoUrl(appId) {
+    return `${FEISHU_APP_URL}/${encodeURIComponent(appId)}/baseinfo`;
+  }
+
+  function openTab(url) {
+    try { chrome.tabs.create({ url }); } catch (e) { window.open(url, '_blank'); }
+  }
+
+  let detectedState = null;
+
+  function renderDetected(detected) {
+    detectedState = detected || null;
+    const box = DOM['feishu-detected'];
+    const list = DOM['feishu-detected-list'];
+    if (!box || !list) return;
+
+    const items = [];
+    const raw = (detected && Array.isArray(detected.list)) ? detected.list.slice() : [];
+    raw.forEach(x => { if (x && x.appId) items.push({ appId: String(x.appId), name: String(x.name || '') }); });
+    if (detected && detected.appId && !items.some(x => x.appId === detected.appId)) {
+      items.unshift({ appId: String(detected.appId), name: String(detected.name || '') });
+    }
+
+    // 去重 + 与当前已配置的一致就不再打扰
+    const seen = new Set();
+    const cur = (DOM['cfg-appId']?.value || '').trim();
+    const useful = items.filter(x => {
+      if (seen.has(x.appId) || x.appId === cur) return false;
+      seen.add(x.appId);
+      return true;
+    });
+
+    if (!useful.length) { box.classList.add('hidden'); return; }
+
+    list.innerHTML = useful.map(it => `
+      <button type="button" class="detected-item" data-appid="${escAttr(it.appId)}">
+        <span class="di-name">${escHtml(it.name || '未命名应用')}</span>
+        <span class="di-id">${escHtml(it.appId)}</span>
+        <span class="di-use">填入 →</span>
+      </button>`).join('');
+
+    list.querySelectorAll('.detected-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.appid;
+        if (!DOM['cfg-appId']) return;
+        DOM['cfg-appId'].value = id;
+        DOM['cfg-appId'].dispatchEvent(new Event('input', { bubbles: true }));
+        DOM['btn-open-app-baseinfo'].dataset.appid = id;
+        showSaveStatus('saved', '已填入 App ID，别忘了点底部「保存配置」');
+        renderDetected(detectedState); // 填完就把这条从待选里去掉
+      });
+    });
+
+    const target = APP_ID_RE.test(cur) ? cur : useful[0].appId;
+    DOM['btn-open-app-baseinfo'].dataset.appid = target;
+    box.classList.remove('hidden');
+  }
+
+  async function refreshDetected() {
+    try {
+      const r = await send({ type: 'settings:get-detected-app' });
+      renderDetected(r && r.detected ? r.detected : null);
+    } catch (e) { renderDetected(null); }
+  }
+
+  async function probeFeishuApp() {
+    const btn = DOM['btn-probe-feishu'];
+    const old = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '读取中…'; }
+    try {
+      const r = await send({ type: 'settings:probe-feishu-app' });
+      if (r && r.success) {
+        renderDetected(r.detected);
+        const n = r.detected && r.detected.list ? r.detected.list.length : 0;
+        showSaveStatus('saved', n > 1 ? `读到 ${n} 个应用，挑一个填入` : '已读到应用，点一下填入');
+      } else if (r && r.error === 'no-open-tab') {
+        showSaveStatus('error', '没找到已打开的飞书开放平台页面，先点左边的按钮打开');
+      } else {
+        showSaveStatus('error', '页面里没读到应用，确认已经登录并点进了某个应用');
+      }
+    } catch (e) {
+      showSaveStatus('error', '读取失败：' + e.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = old; }
+    }
+  }
+
+  function setupFeishuBridge() {
+    DOM['btn-open-platform']?.addEventListener('click', () => openTab(FEISHU_APP_URL));
+    DOM['btn-probe-feishu']?.addEventListener('click', probeFeishuApp);
+
+    DOM['btn-open-app-baseinfo']?.addEventListener('click', (e) => {
+      const id = e.currentTarget.dataset.appid;
+      if (!APP_ID_RE.test(id || '')) return;
+      openTab(appBaseinfoUrl(id));
+    });
+
+    DOM['btn-clear-detected']?.addEventListener('click', async () => {
+      DOM['feishu-detected']?.classList.add('hidden');
+      detectedState = null;
+      try { await send({ type: 'settings:clear-detected-app' }); } catch (e) {}
+    });
+
+    // 你在飞书那边选好应用后，设置页会实时收到
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg && msg.type === 'feishu:detected') renderDetected(msg.detected);
+    });
+
+    // 用户可能直接把应用详情页链接粘进 App ID 框 —— 自动抽出 cli_xxx
+    DOM['cfg-appId']?.addEventListener('paste', () => {
+      setTimeout(() => {
+        const el = DOM['cfg-appId'];
+        const m = String(el.value || '').match(APP_ID_RE);
+        if (m && m[0] !== el.value.trim()) {
+          el.value = m[0];
+          showSaveStatus('saved', '已从链接里提取 App ID');
+        }
+      }, 0);
+    });
   }
 
   async function copyText(text, btn, okText) {

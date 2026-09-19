@@ -67,7 +67,7 @@ let config = { ...DEFAULT_CONFIG };
   chrome.storage.onChanged.addListener(onStorageChange);
   setInterval(processQueue, 1000);
   initUpdate();
-  console.log('🚀 前程-灵感素材库 v4.1.1');
+  console.log('🚀 前程-灵感素材库 v4.1.2');
 })();
 
 async function loadConfig() {
@@ -1132,6 +1132,69 @@ function handleMessage(msg, sender, sendResponse) {
           config.appId = savedId; config.appSecret = savedSecret;
           accessToken = null; tokenExpiresAt = 0;
         }
+        break;
+      }
+
+      // ===== 飞书开放平台桥接（选用已有应用）=====
+      case 'feishu-bridge:detected': {
+        // 来自 feishu-bridge.js：用户在 open.feishu.cn 里浏览/选中了某个应用
+        const appId = String(msg.appId || '').trim();
+        const list = Array.isArray(msg.list) ? msg.list.slice(0, 30) : [];
+        if (!appId && !list.length) { sendResponse({ success: true, stored: false }); break; }
+        const detected = {
+          appId,
+          name: String(msg.name || ''),
+          list,
+          pageUrl: String(msg.pageUrl || ''),
+          at: Date.now(),
+        };
+        await chrome.storage.local.set({ feishuDetected: detected });
+        // 广播给已打开的设置页 / 侧边栏（没开就算了）
+        chrome.runtime.sendMessage({ type: 'feishu:detected', detected }).catch(() => {});
+        sendResponse({ success: true, stored: true });
+        break;
+      }
+
+      case 'settings:get-detected-app': {
+        const d = (await chrome.storage.local.get(['feishuDetected'])).feishuDetected || null;
+        sendResponse({ success: true, detected: d });
+        break;
+      }
+
+      case 'settings:probe-feishu-app': {
+        // 设置页点「读取已打开的应用」：去已打开的 open.feishu.cn 标签页里问一次
+        let tabs = [];
+        try { tabs = await chrome.tabs.query({ url: 'https://open.feishu.cn/*' }); } catch (e) { tabs = []; }
+        if (!tabs.length) {
+          sendResponse({ success: false, error: 'no-open-tab', openTabs: 0 });
+          break;
+        }
+        let found = null;
+        for (const t of tabs) {
+          try {
+            const r = await chrome.tabs.sendMessage(t.id, { type: 'bridge:scan' });
+            if (r && (r.appId || (Array.isArray(r.list) && r.list.length))) { found = r; break; }
+          } catch (e) { /* 该标签页没跑内容脚本，跳过 */ }
+        }
+        if (!found) {
+          sendResponse({ success: false, error: 'no-app-found', openTabs: tabs.length });
+          break;
+        }
+        const detected = {
+          appId: String(found.appId || ''),
+          name: String(found.name || ''),
+          list: Array.isArray(found.list) ? found.list.slice(0, 30) : [],
+          pageUrl: String(found.pageUrl || ''),
+          at: Date.now(),
+        };
+        await chrome.storage.local.set({ feishuDetected: detected });
+        sendResponse({ success: true, detected, openTabs: tabs.length });
+        break;
+      }
+
+      case 'settings:clear-detected-app': {
+        await chrome.storage.local.remove(['feishuDetected']);
+        sendResponse({ success: true });
         break;
       }
 

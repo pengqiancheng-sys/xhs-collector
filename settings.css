@@ -3,22 +3,37 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --red: #ff2442;
-  --red-dark: #e01f3d;
-  --red-light: #ff5c7a;
+  /* ── 品牌红 ── */
+  --red: #ff2442;          /* 主色：圆点 / 开关 / 边条 / 进度条 */
+  --red-strong: #e01f3d;   /* 白字底：按钮、徽标（白字对比 4.74:1）*/
+  --red-hover: #c81b36;
+  --red-text: #d81e39;     /* 红字专用（白底 5.04:1，原 #ff2442 只有 3.76）*/
   --red-soft: #fff0f3;
-  --bg: #f7f7f9;
+  --red-light: #ff5c7a;    /* 焦点描边 / 渐变浅端，仅装饰 */
+  /* ── 底色层次 ── */
+  --bg: #edf0f5;           /* 页面底，和纯白卡片拉开 */
   --card: #ffffff;
-  --ink: #1a1a1a;
-  --ink-2: #666b73;
-  --ink-3: #9aa0a6;
-  --line: #eff0f3;
-  --line-2: #e6e8eb;
-  --ok: #12b76a;
-  --warn: #f79009;
-  --danger: #f04438;
+  --sunken: #f4f6f9;       /* 输入框 / 内嵌块 */
+  /* ── 文字（全部达 WCAG AA 4.5:1）── */
+  --ink: #16181d;          /* 17.8:1 */
+  --ink-2: #4a5158;        /* 8.05:1  ← 原 #666b73 */
+  --ink-3: #6b7280;        /* 4.83:1  ← 原 #9aa0a6 只有 2.64，这是"看不清"的主因 */
+  /* ── 分隔线 ── */
+  --line: #e1e5ec;         /* 1.27，原 #eff0f3 只有 1.14，等于没有 */
+  --line-2: #ccd3de;       /* 1.48，输入框描边 */
+  /* ── 状态色（文本级，全部 ≥4.5）── */
+  --ok: #067a46;           /* 5.41:1  ← 原 #12b76a 只有 2.62 */
+  --warn: #b54708;         /* 5.43:1  ← 原 #f79009 只有 2.35 */
+  --danger: #b42318;       /* 6.57:1  ← 原 #f04438 只有 3.76 */
+  /* ── 状态色（填充级，只用于圆点/边条，不承载文字）── */
+  --ok-fill: #12b76a;
+  --warn-fill: #f79009;
+  --danger-fill: #f04438;
+  /* ── 禁用态（实色，禁止用 opacity 弱化：红底白字降透明度只有 2.1:1）── */
+  --disabled-bg: #e9ecf2;   /* 与 .btn-secondary 同色 */
+  --disabled-ink: #5b6470;  /* 对 --disabled-bg 5.07:1，达 AA */
   --radius: 14px;
-  --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 4px 14px rgba(16, 24, 40, .04);
+  --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 6px 18px rgba(16, 24, 40, .07);
 }
 
 .hidden { display: none !important; }
@@ -47,7 +62,7 @@
   width: 20px; height: 20px;
   border-radius: 50%;
   background: var(--red-soft);
-  color: var(--red);
+  color: var(--red-text);
   font-size: 11.5px;
   font-weight: 700;
   display: flex;
@@ -56,7 +71,7 @@
 }
 .steps li strong { color: var(--ink); }
 .steps code {
-  background: #f0f1f4;
+  background: #eef1f6;
   color: #b42318;
   border-radius: 5px;
   padding: 1px 5px;
@@ -102,7 +117,7 @@ body {
 }
 .version {
   font-size: 12px;
-  color: var(--red);
+  color: var(--red-text);
   background: var(--red-soft);
   padding: 5px 12px;
   border-radius: 999px;
@@ -114,7 +129,7 @@ body {
 .tab-nav {
   display: flex;
   gap: 4px;
-  background: #f0f1f4;
+  background: #e3e7ee;
   border-radius: 12px;
   padding: 4px;
   margin-bottom: 18px;
@@ -137,8 +152,8 @@ body {
 .tab-btn:hover { color: var(--ink); }
 .tab-btn.active {
   background: var(--card);
-  color: var(--red);
-  box-shadow: 0 1px 3px rgba(16, 24, 40, .08);
+  color: var(--red-text);
+  box-shadow: 0 1px 3px rgba(16, 24, 40, .1);
 }
 
 /* ===== Tab Content ===== */
@@ -169,15 +184,15 @@ body {
   margin-bottom: 14px;
   line-height: 1.65;
 }
-.card-desc a { color: var(--red); text-decoration: none; font-weight: 600; }
+.card-desc a { color: var(--red-text); text-decoration: none; font-weight: 600; }
 .card-desc a:hover { text-decoration: underline; }
 .card-desc code {
-  background: #f0f1f4;
+  background: #eef1f6;
   padding: 2px 6px;
   border-radius: 5px;
   font-family: ui-monospace, Menlo, monospace;
   font-size: 12px;
-  color: var(--red-dark);
+  color: var(--red-text);
 }
 
 /* ===== Form ===== */
@@ -193,7 +208,7 @@ body {
 .form-group select {
   width: 100%;
   padding: 10px 13px;
-  background: #f7f8fa;
+  background: var(--sunken);
   border: 1px solid var(--line-2);
   border-radius: 10px;
   color: var(--ink);
@@ -208,7 +223,7 @@ body {
   background: #fff;
   box-shadow: 0 0 0 3px rgba(255, 36, 66, .08);
 }
-.form-group input::placeholder { color: #b6bac0; }
+.form-group input::placeholder { color: var(--ink-3); }
 .form-row { display: flex; gap: 12px; }
 .flex-1 { flex: 1; min-width: 0; }
 .flex-2 { flex: 2; min-width: 0; }
@@ -228,7 +243,7 @@ body {
   padding: 4px;
   border-radius: 6px;
 }
-.toggle-secret:hover { opacity: 1; background: #eff0f3; }
+.toggle-secret:hover { opacity: 1; background: #e3e7ee; }
 
 /* ===== Buttons ===== */
 .btn-row {
@@ -251,18 +266,26 @@ body {
   gap: 5px;
 }
 .btn:active:not(:disabled) { transform: scale(.985); }
-.btn:disabled { opacity: .45; cursor: not-allowed; }
+/* 禁用态不用 opacity：红底白字降到 45% 后仅 2.1:1，等于看不见。
+   改为实色灰底 + --disabled-ink（5.07:1）。 */
+.btn:disabled {
+  opacity: 1;
+  cursor: not-allowed;
+  background: var(--disabled-bg);
+  color: var(--disabled-ink);
+  box-shadow: none;
+}
 .btn-primary {
-  background: var(--red);
+  background: var(--red-strong);
   color: #fff;
   box-shadow: 0 2px 8px rgba(255, 36, 66, .2);
 }
-.btn-primary:hover:not(:disabled) { background: var(--red-dark); }
+.btn-primary:hover:not(:disabled) { background: var(--red-hover); }
 .btn-secondary {
-  background: #f4f5f7;
+  background: #e9ecf2;
   color: var(--ink);
 }
-.btn-secondary:hover:not(:disabled) { background: #eceef1; }
+.btn-secondary:hover:not(:disabled) { background: #dfe3ea; }
 .btn-danger {
   background: #fef3f2;
   color: #b42318;
@@ -297,33 +320,36 @@ body {
   gap: 7px;
   padding: 9px 10px;
   border-radius: 10px;
-  background: #f7f8fa;
+  background: var(--sunken);
   font-size: 12px;
   font-weight: 600;
-  color: var(--ink-3);
+  color: var(--ink-2);   /* 原 --ink-3 在 --sunken 上只有 4.47:1，差一点点不达标 */
   min-width: 0;
 }
 .wizard-step .num {
   width: 20px; height: 20px;
   border-radius: 50%;
-  background: #e6e8eb;
-  color: #fff;
+  background: #dde2ea;
+  color: var(--ink-2);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 11.5px;
+  font-weight: 700;
   flex: 0 0 auto;
 }
 .wizard-step span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wizard-step.active { background: var(--red-soft); color: var(--red); }
-.wizard-step.active .num { background: var(--red); }
+.wizard-step.active { background: var(--red-soft); color: var(--red-text); }
+.wizard-step.active .num { background: var(--red-strong); color: #fff; }
 .wizard-step.done { background: #ecfdf3; color: #027a48; }
-.wizard-step.done .num { background: var(--ok); }
+/* 必须显式给 color：.num 默认 color 是深灰 --ink-2，
+   压在深绿 --ok 上只有 1.5:1，等于看不见 */
+.wizard-step.done .num { background: var(--ok); color: #fff; }
 
 .step-num-badge {
   width: 22px; height: 22px;
   border-radius: 50%;
-  background: var(--red);
+  background: var(--red-strong);
   color: #fff;
   display: inline-flex;
   align-items: center;
@@ -351,7 +377,7 @@ body {
   line-height: 1.55;
 }
 .perm-item:last-child { border-bottom: none; }
-.perm-item:nth-child(odd) { background: #fafbfc; }
+.perm-item:nth-child(odd) { background: #f8fafc; }
 .perm-item .perm-dot {
   width: 6px; height: 6px; border-radius: 50%;
   background: var(--red);
@@ -398,16 +424,16 @@ body {
   flex-wrap: wrap;
   padding: 12px 14px;
   border-radius: 11px;
-  background: #f7f8fa;
+  background: var(--sunken);
   font-size: 12.5px;
   color: var(--ink-2);
 }
 .update-box.has-new {
   background: var(--red-soft);
-  color: var(--red);
-  border: 1px solid #ffd9e0;
+  color: var(--red-text);
+  border: 1px solid #ffd0d8;
 }
-.update-box.has-new strong { color: var(--red); }
+.update-box.has-new strong { color: var(--red-text); }
 
 /* ===== Mapping list ===== */
 .mapping-item {
@@ -426,7 +452,7 @@ body {
 }
 .mapping-label .data-key {
   display: block;
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--ink-3);
   font-family: ui-monospace, Menlo, monospace;
   font-weight: 400;
@@ -436,7 +462,7 @@ body {
 .mapping-field-select select {
   width: 100%;
   padding: 8px 11px;
-  background: #f7f8fa;
+  background: var(--sunken);
   border: 1px solid var(--line-2);
   border-radius: 9px;
   color: var(--ink);
@@ -459,7 +485,7 @@ body {
 .default-item input {
   flex: 1;
   padding: 8px 11px;
-  background: #f7f8fa;
+  background: var(--sunken);
   border: 1px solid var(--line-2);
   border-radius: 9px;
   color: var(--ink);
@@ -499,7 +525,7 @@ body {
 }
 .toggle-item small {
   display: block;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink-3);
   margin-top: 3px;
   line-height: 1.55;
@@ -551,14 +577,106 @@ body {
 .save-status.error { color: var(--danger); font-weight: 600; }
 
 /* ===== About ===== */
-#tab-about a { color: var(--red); text-decoration: none; font-weight: 600; }
+#tab-about a { color: var(--red-text); text-decoration: none; font-weight: 600; }
 #tab-about a:hover { text-decoration: underline; }
+
+/* ===== 第 1 步：双路径说明 + 检测到的应用 ===== */
+.two-path {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  margin-top: 12px;
+}
+.path-item {
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.path-item strong {
+  display: block;
+  color: var(--ink);
+  font-size: 12.5px;
+  margin-bottom: 2px;
+}
+
+.detected-box {
+  margin-top: 12px;
+  border: 1px solid #ffd8b0;
+  background: #fffaf3;
+  border-radius: 11px;
+  padding: 11px 13px;
+}
+.detected-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--warn);
+}
+.detected-clear {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 6px;
+}
+.detected-clear:hover { background: #ffeacf; color: var(--ink); }
+.detected-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.detected-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  padding: 9px 11px;
+  transition: border-color .15s, background .15s;
+}
+.detected-item:hover { border-color: var(--red-light); background: var(--red-soft); }
+.di-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.di-id {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  flex: 0 0 auto;
+}
+.di-use { font-size: 12px; font-weight: 700; color: var(--red-text); flex: 0 0 auto; }
+.detected-hint {
+  margin: 9px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
 
 /* ===== 建表提示词 Tab ===== */
 #prompt-text::-webkit-scrollbar { width: 8px; }
 #prompt-text::-webkit-scrollbar-thumb { background: #d9dce1; border-radius: 4px; }
-#tab-prompt table th { color: var(--ink); font-weight: 700; }
-#tab-prompt table td { color: var(--ink-2); vertical-align: top; }
+/* 注意：早前这里有一条 `#tab-prompt table td { color: var(--ink-2) }`，
+   带 ID 选择器特异性 (1,0,2)，会把下方 .field-table td.req / td.dim 的
+   color 全部压掉（表现为"必填标记不上色"）。表格样式现全部交给
+   .field-table 系列统一处理，故删除，勿再按 ID 包一层 table 选择器。*/
 
 /* ===== 滚动条 ===== */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -570,7 +688,7 @@ body {
 .advanced-config {
   margin: 12px 0 4px;
   padding: 11px 13px;
-  background: #fafbfc;
+  background: #f7f9fc;
   border: 1px dashed var(--line-2);
   border-radius: 10px;
 }
@@ -581,17 +699,84 @@ body {
   font-weight: 600;
   user-select: none;
 }
-.advanced-config[open] summary { color: var(--red); }
+.advanced-config[open] summary { color: var(--red-text); }
 
 .form-group select {
   width: 100%;
   padding: 10px 13px;
-  background: #f7f8fa;
+  background: var(--sunken);
   border: 1px solid var(--line-2);
   border-radius: 10px;
   color: var(--ink);
   font-size: 13px;
   font-family: inherit;
+}
+
+/* ===== 字段速查表 ===== */
+.table-scroll { overflow-x: auto; margin-top: 10px; }
+.field-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12.5px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.field-table th {
+  text-align: left;
+  padding: 9px 12px;
+  background: #eef1f6;
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line-2);
+  white-space: nowrap;
+}
+.field-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-2);
+  vertical-align: top;
+  background: var(--card);
+}
+.field-table tbody tr:nth-child(even) td { background: #f8fafd; }
+.field-table tbody tr:last-child td { border-bottom: none; }
+/* 必填标记：类型列给浅琥珀底（一眼可扫），选项列只上色不加底（避免整行发黄）。
+   注意 td.req-type 与 tr:nth-child(even) td 特异性相同，靠书写顺序胜出，勿上移。 */
+.field-table td.req-type {
+  color: var(--warn);
+  font-weight: 700;
+  background: #fdf1e2;
+}
+.field-table td.req-opt { color: var(--warn); font-weight: 600; }
+.field-table td.dim  { color: var(--ink-3); }
+/* 图例小徽标（与必填标记同色，说明"就是这个色"） */
+.req-chip {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: #fdf1e2;
+  color: var(--warn);
+  font-weight: 700;
+}
+.warn-text { color: var(--warn); font-weight: 600; }
+
+/* ===== 提示词代码块（深色，长文本更好扫读）===== */
+#prompt-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 360px;
+  overflow: auto;
+  background: #1f2430;
+  border: 1px solid #2c3444;
+  border-radius: 10px;
+  padding: 13px;
+  font-size: 11.5px;
+  line-height: 1.68;
+  color: #dfe5ee;
+  margin-top: 10px;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
 }
 
 /* ===== Responsive ===== */
@@ -603,4 +788,6 @@ body {
   .tab-btn { font-size: 11.5px; padding: 8px 10px; }
   .wizard-step span { display: none; }
   .wizard-step { justify-content: center; }
+  .two-path { grid-template-columns: 1fr; }
+  .detected-item { flex-wrap: wrap; }
 }

@@ -3,22 +3,37 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --red: #ff2442;
-  --red-dark: #e01f3d;
-  --red-light: #ff5c7a;
+  /* ── 品牌红 ── */
+  --red: #ff2442;          /* 主色：圆点 / 开关 / 边条 / 进度条 */
+  --red-strong: #e01f3d;   /* 白字底：按钮（白字对比 4.74:1）*/
+  --red-hover: #c81b36;
+  --red-text: #d81e39;     /* 红字专用（白底 5.04:1，原 #ff2442 只有 3.76）*/
   --red-soft: #fff0f3;
-  --bg: #f7f7f9;
+  --red-light: #ff5c7a;    /* 焦点描边 / 渐变浅端，仅装饰 */
+  /* ── 底色层次 ── */
+  --bg: #edf0f5;
   --card: #ffffff;
-  --ink: #1a1a1a;
-  --ink-2: #666b73;
-  --ink-3: #9aa0a6;
-  --line: #eff0f3;
-  --line-2: #e6e8eb;
-  --ok: #12b76a;
-  --warn: #f79009;
-  --danger: #f04438;
+  --sunken: #f4f6f9;
+  /* ── 文字（全部达 WCAG AA 4.5:1）── */
+  --ink: #16181d;
+  --ink-2: #4a5158;        /* ← 原 #666b73 */
+  --ink-3: #6b7280;        /* ← 原 #9aa0a6 只有 2.64，这是"看不清"的主因 */
+  /* ── 分隔线 ── */
+  --line: #e1e5ec;
+  --line-2: #ccd3de;
+  /* ── 状态色（文本级，全部 ≥4.5）── */
+  --ok: #067a46;
+  --warn: #b54708;
+  --danger: #b42318;
+  /* ── 状态色（填充级，只用于圆点/边条）── */
+  --ok-fill: #12b76a;
+  --warn-fill: #f79009;
+  --danger-fill: #f04438;
+  /* ── 禁用态（实色，禁止用 opacity 弱化：红底白字降透明度只有 2.1:1）── */
+  --disabled-bg: #e9ecf2;   /* 与 .btn-secondary 同色 */
+  --disabled-ink: #5b6470;  /* 对 --disabled-bg 5.07:1，达 AA */
   --radius: 14px;
-  --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 4px 14px rgba(16, 24, 40, .04);
+  --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 6px 18px rgba(16, 24, 40, .07);
 }
 
 .hidden { display: none !important; }
@@ -71,8 +86,8 @@ body {
   flex: 0 0 auto;
 }
 .icon-btn {
-  background: #f4f5f7;
-  border: none;
+  background: #e9ecf2;
+  border: 1px solid #dde2ea;
   color: var(--ink-2);
   width: 32px; height: 32px;
   border-radius: 10px;
@@ -83,8 +98,8 @@ body {
   justify-content: center;
   transition: background .15s, color .15s;
 }
-.icon-btn:hover { background: var(--red-soft); color: var(--red); }
-.icon-btn:disabled { opacity: .4; cursor: not-allowed; }
+.icon-btn:hover { background: var(--red-soft); color: var(--red-text); border-color: #ffd0d8; }
+.icon-btn:disabled { opacity: .55; cursor: not-allowed; }
 .icon-btn.dot { position: relative; }
 .icon-btn.dot::after {
   content: '';
@@ -111,7 +126,7 @@ body {
   align-items: center;
   gap: 5px;
   background: var(--red-soft);
-  color: var(--red);
+  color: var(--red-text);
   border-radius: 999px;
   padding: 4px 11px;
   font-size: 11.5px;
@@ -171,18 +186,26 @@ body {
   gap: 6px;
 }
 .btn:active:not(:disabled) { transform: scale(.985); }
-.btn:disabled { opacity: .45; cursor: not-allowed; }
+/* 禁用态不用 opacity：红底白字降到 45% 后仅 2.1:1，等于看不见。
+   改为实色灰底 + --disabled-ink（5.07:1）。 */
+.btn:disabled {
+  opacity: 1;
+  cursor: not-allowed;
+  background: var(--disabled-bg);
+  color: var(--disabled-ink);
+  box-shadow: none;
+}
 .btn-primary {
-  background: var(--red);
+  background: var(--red-strong);
   color: #fff;
   box-shadow: 0 2px 8px rgba(255, 36, 66, .22);
 }
-.btn-primary:hover:not(:disabled) { background: var(--red-dark); }
+.btn-primary:hover:not(:disabled) { background: var(--red-hover); }
 .btn-secondary {
-  background: #f4f5f7;
+  background: #e9ecf2;
   color: var(--ink);
 }
-.btn-secondary:hover:not(:disabled) { background: #eceef1; }
+.btn-secondary:hover:not(:disabled) { background: #dfe3ea; }
 .capture-status {
   margin-top: 10px;
   font-size: 12px;
@@ -204,15 +227,15 @@ body {
 .field { flex: 1; min-width: 0; }
 .field label {
   display: block;
-  font-size: 11.5px;
-  color: var(--ink-3);
+  font-size: 12px;
+  color: var(--ink-2);
   margin-bottom: 5px;
   font-weight: 500;
 }
 .field input {
   width: 100%;
   padding: 9px 11px;
-  background: #f7f8fa;
+  background: var(--sunken);
   border: 1px solid var(--line-2);
   border-radius: 9px;
   color: var(--ink);
@@ -232,7 +255,7 @@ body {
 }
 .progress-track {
   height: 6px;
-  background: #f0f1f4;
+  background: #e3e7ee;
   border-radius: 999px;
   overflow: hidden;
 }
@@ -248,7 +271,7 @@ body {
   font-size: 12px;
   color: var(--ink-2);
   padding: 9px 11px;
-  background: #f7f8fa;
+  background: var(--sunken);
   border-radius: 9px;
   margin: 4px 0 8px;
 }
@@ -257,16 +280,16 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  font-size: 11.5px;
+  font-size: 12px;
   padding: 7px 10px;
-  background: #f7f8fa;
+  background: var(--sunken);
   border-radius: 8px;
   margin-top: 4px;
   color: var(--ink-2);
 }
-.task-item.running   { background: #fffaeb; border-left: 3px solid var(--warn); }
-.task-item.completed { background: #ecfdf3; border-left: 3px solid var(--ok); opacity: .75; }
-.task-item.failed    { background: #fef3f2; border-left: 3px solid var(--danger); }
+.task-item.running   { background: #fff7e6; border-left: 3px solid var(--warn-fill); color: #93370d; }
+.task-item.completed { background: #ecfdf3; border-left: 3px solid var(--ok-fill); color: #05603a; }
+.task-item.failed    { background: #fef3f2; border-left: 3px solid var(--danger-fill); color: #912018; }
 
 /* ===== 日志 ===== */
 .log-list {
@@ -284,11 +307,11 @@ body {
   color: var(--ink-2);
   line-height: 1.5;
 }
-.log-entry:nth-child(odd) { background: #fafbfc; }
+.log-entry:nth-child(odd) { background: #f7f9fc; }
 .log-entry .log-time { color: var(--ink-3); min-width: 46px; flex: 0 0 auto; }
-.log-entry.success { color: #027a48; }
-.log-entry.error   { color: #b42318; }
-.log-entry.warn    { color: #b54708; }
+.log-entry.success { color: #05603a; }
+.log-entry.error   { color: #912018; }
+.log-entry.warn    { color: #93370d; }
 .log-empty { color: var(--ink-3); text-align: center; padding: 16px; font-size: 12px; }
 
 /* ===== 配置状态条 ===== */
@@ -316,14 +339,14 @@ body {
   font-size: 12px;
   line-height: 1.5;
   background: var(--red-soft);
-  color: var(--red);
-  border: 1px solid #ffd9e0;
+  color: var(--red-text);
+  border: 1px solid #ffd0d8;
   cursor: pointer;
 }
-#update-status:hover { background: #ffe6eb; }
+#update-status:hover { background: #ffe4ea; }
 
 /* ===== 滚动条 ===== */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-thumb { background: #d9dce1; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #c5c9d0; }
+::-webkit-scrollbar-thumb { background: #c8ced8; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #aeb5c1; }
 ::-webkit-scrollbar-track { background: transparent; }

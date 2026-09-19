@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "前程-灵感素材库",
-  "version": "4.1.1",
+  "version": "4.1.2",
   "description": "把网页上的标题、正文、图片整理进你的飞书多维表格。支持自定义字段映射、自动表结构探测与多表格切换。",
   "permissions": [
     "activeTab",
@@ -35,6 +35,15 @@
       ],
       "run_at": "document_start",
       "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://open.feishu.cn/*"
+      ],
+      "js": [
+        "feishu-bridge.js"
+      ],
+      "run_at": "document_idle"
     },
     {
       "matches": [

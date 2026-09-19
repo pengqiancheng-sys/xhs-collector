@@ -10,7 +10,7 @@
   <main class="settings-app">
     <header class="settings-header">
       <h1><img class="logo" src="icons/icon32.png" alt="">前程-灵感素材库</h1>
-      <span class="version" id="version-tag">v4.1.1</span>
+      <span class="version" id="version-tag">v4.1.2</span>
     </header>
 
     <!-- 标签页导航 -->
@@ -40,14 +40,47 @@
         </p>
 
         <div class="btn-row">
-          <a class="btn btn-primary" href="https://open.feishu.cn/app" target="_blank" rel="noopener">🚀 打开飞书开放平台</a>
-          <button class="btn btn-secondary" id="btn-copy-perms">📋 复制要开的权限</button>
+          <button class="btn btn-primary" id="btn-open-platform">🚀 打开我的飞书应用列表</button>
+          <button class="btn btn-secondary" id="btn-probe-feishu">🔄 读取已打开的应用</button>
+        </div>
+
+        <div class="two-path">
+          <div class="path-item">
+            <strong>还没建过应用</strong>
+            在打开的列表页右上角点「创建企业自建应用」，填个名字就行。
+          </div>
+          <div class="path-item">
+            <strong>已经有应用了</strong>
+            在列表里点进你要用的那个，回来点「读取已打开的应用」——插件会直接把 App ID 填好，不用手抄。
+          </div>
+        </div>
+
+        <p class="card-desc" style="margin:12px 0 0;">
+          💡 未登录时上面这个链接会<b>直接打开扫码登录页</b>，用飞书 App 扫一下即可；<br>
+          已登录则直接进入控制台，不会重复要求登录。
+        </p>
+
+        <div id="feishu-detected" class="detected-box hidden">
+          <div class="detected-head">
+            <span>📡 检测到你在飞书开放平台的应用</span>
+            <button class="detected-clear" id="btn-clear-detected" title="忽略">✕</button>
+          </div>
+          <div id="feishu-detected-list" class="detected-list"></div>
+          <p class="detected-hint">
+            App Secret 飞书默认打码、必须手动点「显示」再复制，插件读不到 —— 挑好应用后点下面的按钮直达复制页面。
+          </p>
+          <div class="btn-row">
+            <button class="btn btn-secondary btn-sm" id="btn-open-app-baseinfo">🔑 去该应用复制 App Secret</button>
+          </div>
         </div>
 
         <div class="perm-list">
           <div class="perm-item"><span class="perm-dot"></span><div><strong>多维表格 — 查看</strong><br>列出数据表、读取字段结构</div></div>
           <div class="perm-item"><span class="perm-dot"></span><div><strong>多维表格 — 查看、评论、编辑和管理</strong><br>新增记录（写入素材）</div></div>
           <div class="perm-item"><span class="perm-dot"></span><div><strong>云空间 — 查看、评论、编辑和管理云空间中所有文件</strong><br>上传图片素材</div></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary btn-sm" id="btn-copy-perms">📋 复制要开的权限</button>
         </div>
 
         <p class="card-desc" style="margin:12px 0 0;">
@@ -147,7 +180,7 @@
       <div class="card">
         <div class="card-title">采集数据 → 表格字段映射</div>
         <p class="card-desc">将采集到的每项数据映射到你表格中对应的字段。同名字段会自动匹配。</p>
-        <p class="card-desc" style="color:#ffd43b;margin-top:4px;">💡 先点击「自动探测表格字段」，这里会自动填充你表格的字段列表供选择。</p>
+        <p class="card-desc" style="color:#b54708;margin-top:4px;">💡 先点击「自动探测表格字段」，这里会自动填充你表格的字段列表供选择。</p>
 
         <div class="mapping-list" id="mapping-list">
           <!-- 动态生成 -->
@@ -224,48 +257,48 @@
         </p>
         <div class="btn-row">
           <button class="btn btn-primary" id="btn-copy-prompt" style="width:auto;padding:10px 20px;">📋 复制提示词</button>
-          <span id="copy-status" style="font-size:12px;color:#51cf66;align-self:center;"></span>
+          <span id="copy-status" style="font-size:12.5px;color:#067a46;align-self:center;"></span>
         </div>
       </div>
 
       <div class="card">
         <div class="card-title">表结构速查（共 14 个字段）</div>
         <p class="card-desc">手工建表时照这张表填即可。字段名必须完全一致。</p>
-        <div style="overflow-x:auto;margin-top:8px;">
-          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <p class="card-desc" style="margin-top:-4px;">
+          <span class="req-chip">单选</span> / <span class="req-chip">多选</span>
+          带琥珀底色的为选项型字段，其余为普通字段。
+        </p>
+        <div class="table-scroll">
+          <table class="field-table">
             <thead>
-              <tr style="background:rgba(255,255,255,0.06);">
-                <th style="text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.1);">字段名</th>
-                <th style="text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.1);">类型</th>
-                <th style="text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.1);">选项 / 说明</th>
-              </tr>
+              <tr><th>字段名</th><th>类型</th><th>选项 / 说明</th></tr>
             </thead>
             <tbody>
-              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">选题标题</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">文本</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;">主字段（第一列）</td></tr>
-              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">多行文本</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">文本</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;">正文，最长约 15000 字</td></tr>
-              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">作者/来源</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">文本</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;"></td></tr>
-              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">来源平台</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">单选</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#ffd43b;">小红书 / 网页</td></tr>
-              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">来源链接</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">超链接</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;"></td></tr>
-              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">选题来源</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">单选</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#ffd43b;">浏览器收录 / 链接收录 / 图片收录 / 批量收录</td></tr>
-              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">素材图片</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">附件</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;">仅图片</td></tr>
-              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">标签</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#ffd43b;">多选</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;">格式 #标签，无需预建选项</td></tr>
-              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">发布时间</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">日期</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;">格式 yyyy/MM/dd HH:mm</td></tr>
-              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">点赞数</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">数字</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;">小数位 0</td></tr>
-              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">收藏数</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">数字</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;">小数位 0</td></tr>
-              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">评论数</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">数字</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;">小数位 0</td></tr>
-              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">状态</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">单选</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#ffd43b;">待选题 / 已选题 / 已完成</td></tr>
-              <tr><td style="padding:6px 8px;">优先级</td><td style="padding:6px 8px;">单选</td><td style="padding:6px 8px;color:#ffd43b;">高 / 中 / 低</td></tr>
+              <tr><td>选题标题</td><td>文本</td><td class="dim">主字段（第一列），不能改类型</td></tr>
+              <tr><td>多行文本</td><td>文本</td><td class="dim">正文，最长约 15000 字</td></tr>
+              <tr><td>作者/来源</td><td>文本</td><td class="dim">—</td></tr>
+              <tr><td>来源平台</td><td class="req">单选</td><td class="req">小红书 / 网页</td></tr>
+              <tr><td>来源链接</td><td>超链接</td><td class="dim">—</td></tr>
+              <tr><td>选题来源</td><td class="req">单选</td><td class="req">浏览器收录 / 链接收录 / 图片收录 / 批量收录</td></tr>
+              <tr><td>素材图片</td><td>附件</td><td class="dim">仅图片</td></tr>
+              <tr><td>标签</td><td class="req-type">多选</td><td class="dim">格式 #标签，无需预建选项</td></tr>
+              <tr><td>发布时间</td><td>日期</td><td class="dim">格式 yyyy/MM/dd HH:mm</td></tr>
+              <tr><td>点赞数</td><td>数字</td><td class="dim">小数位 0</td></tr>
+              <tr><td>收藏数</td><td>数字</td><td class="dim">小数位 0</td></tr>
+              <tr><td>评论数</td><td>数字</td><td class="dim">小数位 0</td></tr>
+              <tr><td>状态</td><td class="req">单选</td><td class="req">待选题 / 已选题 / 已完成</td></tr>
+              <tr><td>优先级</td><td class="req">单选</td><td class="req">高 / 中 / 低</td></tr>
             </tbody>
           </table>
         </div>
-        <p class="card-desc" style="color:#ffd43b;margin-top:10px;">
-          ⚠️ 黄色标注的是单选/多选字段，选项必须预先建全 —— 否则写入时会报错 1254062，数据写不进去。
+        <p class="card-desc warn-text" style="margin-top:10px;">
+          ⚠️ 上表中带琥珀色底色的「单选 / 多选」字段，选项必须预先建全 —— 否则写入时会报错 1254062，数据写不进去。
         </p>
       </div>
 
       <div class="card">
         <div class="card-title">提示词全文（可手动复制）</div>
-        <pre id="prompt-text" style="white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;font-size:11px;line-height:1.6;color:#ced4da;margin-top:8px;">加载中…</pre>
+        <pre id="prompt-text">加载中…</pre>
       </div>
     </section>
 
@@ -274,7 +307,7 @@
       <div class="card">
         <div class="card-title">🔄 版本与更新</div>
         <div class="update-box" id="update-box">
-          <span>当前版本 <strong id="cur-version">v4.1.1</strong></span>
+          <span>当前版本 <strong id="cur-version">v4.1.2</strong></span>
           <button class="btn btn-secondary btn-sm" id="btn-check-update">检查更新</button>
         </div>
         <div id="update-detail" class="connection-result hidden"></div>
@@ -288,7 +321,7 @@
           <li>把新文件夹里的文件，<strong>全部覆盖</strong>到你原来那个插件文件夹里</li>
           <li>打开 <code>chrome://extensions/</code>，在本插件卡片上点 <strong>刷新 ↻</strong></li>
         </ol>
-        <p class="card-desc" style="margin:10px 0 0;line-height:1.8;color:#9aa0a6;">
+        <p class="card-desc" style="margin:10px 0 0;line-height:1.8;color:#6b7280;">
           为什么配置不会丢：凭证存在 Chrome 里，按插件 ID 保存，覆盖文件不影响它。<br>
           如果原来的文件夹已经删了：在新目录里「加载已解压的扩展程序」，然后重新填一次凭证即可。
         </p>
@@ -297,13 +330,13 @@
       <div class="card">
         <div class="card-title">前程-灵感素材库 · 浏览器插件</div>
         <p class="card-desc" style="line-height:1.8;">
-          版本：<strong id="about-version">v4.1.1</strong><br>
+          版本：<strong id="about-version">v4.1.2</strong><br>
           开源地址：<a href="https://github.com/pengqiancheng-sys/xhs-collector" target="_blank">GitHub</a><br>
           许可证：MIT<br><br>
           把网页上的标题、正文、图片整理进你的飞书多维表格。<br>
           支持自定义飞书应用、表格与字段映射，适用于任何团队的工作流。
         </p>
-        <p class="card-desc" style="color:#868e96;margin-top:10px;line-height:1.7;">
+        <p class="card-desc" style="color:#6b7280;margin-top:10px;line-height:1.7;">
           使用提示：本工具用于个人素材归档与整理。请遵守你访问的网站的服务条款，<br>
           并自行确认所收藏内容的合规使用范围。
         </p>
