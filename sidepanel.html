@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>前程智囊团 · 素材采集</title>
+  <title>前程-灵感素材库</title>
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
       <div class="brand">
         <span class="brand-logo">📦</span>
         <div>
-          <h1>前程智囊团 · 采集</h1>
+          <h1>前程-灵感素材库</h1>
           <div id="server-status" class="status">正在连接飞书...</div>
         </div>
       </div>
@@ -41,26 +41,23 @@
       <div id="api-badge" style="display:none;font-size:10px;color:#51cf66;margin-top:4px;">📡 API 数据已捕获</div>
     </section>
 
-    <!-- 采集操作 -->
+    <!-- 收录操作 -->
     <section class="section capture-panel" id="capture-panel">
-      <div class="capture-label">快捷采集</div>
+      <div class="capture-label">快捷收藏</div>
       <div class="capture-actions">
         <button id="btn-save-page" class="btn btn-primary" disabled>
-          📥 采集当前页面
-        </button>
-        <button id="btn-save-xhs" class="btn btn-secondary" disabled>
-          🔴 小红书 API 采集（完整数据）
+          📥 收藏当前页面
         </button>
       </div>
       <div id="capture-status" class="capture-status hidden"></div>
     </section>
 
-    <!-- 博主批量采集 -->
+    <!-- 博主批量收录 -->
     <section class="section blogger-panel hidden" id="blogger-panel">
-      <div class="capture-label">博主批量采集</div>
+      <div class="capture-label">博主批量收录</div>
       <div class="field-row">
         <div class="field">
-          <label>采集数量</label>
+          <label>收录数量</label>
           <input id="blogger-limit" type="number" value="20" min="1" max="100" step="1">
         </div>
         <div class="field">
@@ -69,7 +66,7 @@
         </div>
       </div>
       <button id="btn-blogger-start" class="btn btn-primary">
-        🚀 开始批量采集博主笔记
+        🚀 开始批量收录博主笔记
       </button>
       <div id="blogger-progress" class="progress-bar hidden">
         <div class="progress-top">

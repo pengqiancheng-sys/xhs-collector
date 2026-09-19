@@ -91,7 +91,7 @@ body {
   border: 1px solid rgba(255,255,255,0.1);
 }
 
-/* ===== 采集操作 ===== */
+/* ===== 收录操作 ===== */
 .capture-panel { }
 .capture-panel .capture-label {
   font-size: 12px;
@@ -142,7 +142,7 @@ body {
 .capture-status[data-state="pending"] { background: rgba(255,212,59,0.1); color: #ffd43b; }
 .capture-status[data-state="idle"] { color: #868e96; }
 
-/* ===== 博主采集 ===== */
+/* ===== 博主批量收录 ===== */
 .blogger-panel { }
 .field-row {
   display: flex;
@@ -233,9 +233,10 @@ body {
 .log-entry .log-time { color: #868e96; min-width: 48px; }
 .log-entry.success { color: #51cf66; }
 .log-entry.error { color: #ff6b6b; }
+.log-entry.warn { color: #ffd43b; }
 .log-empty { color: #868e96; text-align: center; padding: 16px; }
 
-/* ===== v4.0 配置状态条 ===== */
+/* ===== v4 配置状态条 ===== */
 .config-bar {
   display: flex;
   align-items: center;

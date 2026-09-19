@@ -1,4 +1,4 @@
-// 前程智囊团 · 页面观察器 v2.1
+// 前程-灵感素材库 · 页面观察器
 // 增强: 深度DOM解析 + API数据融合
 (() => {
   let lastPageInfo = null;
@@ -255,49 +255,6 @@
     return null;
   }
 
-  function parseCountText(value) {
-    if (!value) return 0;
-    const text = String(value).trim().replace(/[\s,]/g, '').replace(/[^0-9.\u4e00-\u9fa5]/g, '');
-    if (!text) return 0;
-    if (text.includes('万')) { const n = parseFloat(text.replace('万', '')); return isNaN(n) ? 0 : Math.round(n * 10000); }
-    const n = parseFloat(text);
-    return isNaN(n) ? 0 : Math.round(n);
-  }
-
-  function getXhsInitialState() {
-    try {
-      const scripts = document.querySelectorAll('script');
-      for (const script of scripts) {
-        const text = script.textContent || '';
-        if (!text.includes('window.__INITIAL_STATE__=')) continue;
-        const jsonText = text.replace('window.__INITIAL_STATE__=', '').replace(/undefined/g, 'null').replace(/;$/, '');
-        return JSON.parse(jsonText);
-      }
-    } catch(e) {}
-    return null;
-  }
-
-  function findNoteInState(state) {
-    if (!state || typeof state !== 'object') return null;
-    const detailMap = state?.note?.noteDetailMap || {};
-    const keys = Object.keys(detailMap);
-    for (const key of keys) {
-      const entry = detailMap[key];
-      const note = entry?.note || entry;
-      if (note && note.title && note.noteId) return note;
-    }
-    return null;
-  }
-
-  function parseCountText(value) {
-    if (!value) return 0;
-    const text = String(value).trim().replace(/[\s,]/g, '').replace(/[^0-9.一-龥]/g, '');
-    if (!text) return 0;
-    if (text.includes('万')) { const n = parseFloat(text.replace('万', '')); return isNaN(n) ? 0 : Math.round(n * 10000); }
-    const n = parseFloat(text);
-    return isNaN(n) ? 0 : Math.round(n);
-  }
-
   function buildPageInfo() {
     const platform = getPlatformInfo();
     const pageType = getPageType();
@@ -385,7 +342,7 @@
   // 监听 xhs-bridge (MAIN 世界) 的 API 数据
   window.addEventListener('message', (event) => {
     if (event.source !== window) return;
-    if (event.data?.source === 'qiancheng-xhs-bridge' && event.data?.type === 'xhs-api-response') {
+    if (event.data?.source === 'qiancheng-ideahub-bridge' && event.data?.type === 'xhs-api-response') {
       const payload = event.data.payload;
       if (payload?.note) {
         const n = payload.note;
@@ -445,5 +402,5 @@
     }
   });
 
-  console.log('👁️ 前程智囊团 Page Observer v2.1 已激活');
+  console.log('👁️ 前程-灵感素材库 Page Observer 已激活');
 })();

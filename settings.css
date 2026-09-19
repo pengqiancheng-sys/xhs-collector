@@ -1,4 +1,4 @@
-/* 前程智囊团 v4.0 — 设置页样式 */
+/* 前程-灵感素材库 v4.1 — 设置页样式 */
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -50,15 +50,16 @@ body {
 }
 .tab-btn {
   flex: 1;
-  padding: 10px 16px;
+  padding: 9px 10px;
   background: transparent;
   border: none;
   border-radius: 8px;
   color: #868e96;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
+  white-space: nowrap;
 }
 .tab-btn:hover { color: #e8e8ed; background: rgba(255,255,255,0.04); }
 .tab-btn.active {
@@ -329,6 +330,15 @@ body {
   text-decoration: none;
 }
 #tab-about a:hover { text-decoration: underline; }
+
+/* 建表提示词 Tab */
+#prompt-text::-webkit-scrollbar { width: 8px; }
+#prompt-text::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.15);
+  border-radius: 4px;
+}
+#tab-prompt table th { color: #e8e8ed; font-weight: 600; }
+#tab-prompt table td { color: #ced4da; vertical-align: top; }
 
 /* Responsive */
 @media (max-width: 560px) {

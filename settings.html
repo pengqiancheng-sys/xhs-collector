@@ -3,21 +3,22 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>前程智囊团 · 采集设置</title>
+  <title>前程-灵感素材库 · 设置</title>
   <link rel="stylesheet" href="settings.css">
 </head>
 <body>
   <main class="settings-app">
     <header class="settings-header">
-      <h1>⚙️ 前程智囊团 · 采集设置</h1>
-      <span class="version" id="version-tag">v4.0.14</span>
+      <h1>⚙️ 前程-灵感素材库 · 设置</h1>
+      <span class="version" id="version-tag">v4.1.0</span>
     </header>
 
     <!-- 标签页导航 -->
     <nav class="tab-nav">
       <button class="tab-btn active" data-tab="feishu">🔑 飞书凭证</button>
       <button class="tab-btn" data-tab="mapping">🔗 字段映射</button>
-      <button class="tab-btn" data-tab="features">🎛️ 采集设置</button>
+      <button class="tab-btn" data-tab="features">🎛️ 收藏设置</button>
+      <button class="tab-btn" data-tab="prompt">📋 建表提示词</button>
       <button class="tab-btn" data-tab="about">ℹ️ 关于</button>
     </nav>
 
@@ -117,28 +118,28 @@
       </div>
     </section>
 
-    <!-- Tab 3: 采集设置 -->
+    <!-- Tab 3: 收藏设置 -->
     <section class="tab-content" id="tab-features">
       <div class="card">
-        <div class="card-title">采集功能开关</div>
+        <div class="card-title">收藏功能开关</div>
         <div class="toggle-list">
           <label class="toggle-item">
             <div>
-              <strong>API 拦截采集</strong>
-              <small>拦截小红书 API 请求，获取最完整的结构化数据</small>
+              <strong>页面数据读取</strong>
+              <small>读取页面已加载的结构化数据，拿到最完整的标题、正文与互动数据</small>
             </div>
             <input type="checkbox" id="cfg-apiIntercept" checked>
           </label>
           <label class="toggle-item">
             <div>
-              <strong>DOM 深度解析</strong>
+              <strong>页面信息解析</strong>
               <small>从页面 HTML 中提取标题、正文、作者等信息</small>
             </div>
             <input type="checkbox" id="cfg-domParse" checked>
           </label>
           <label class="toggle-item">
             <div>
-              <strong>图片上传</strong>
+              <strong>图片同步</strong>
               <small>自动下载笔记图片并上传到飞书附件字段</small>
             </div>
             <input type="checkbox" id="cfg-imageUpload" checked>
@@ -147,7 +148,7 @@
       </div>
 
       <div class="card">
-        <div class="card-title">采集参数</div>
+        <div class="card-title">收藏参数</div>
         <div class="form-row">
           <div class="form-group flex-1">
             <label>最多上传图片数</label>
@@ -161,16 +162,75 @@
       </div>
     </section>
 
-    <!-- Tab 4: 关于 -->
+    <!-- Tab 4: 建表提示词 -->
+    <section class="tab-content" id="tab-prompt">
+      <div class="card">
+        <div class="card-title">📋 一键生成配套多维表格</div>
+        <p class="card-desc">
+          本插件需要一张特定结构的多维表格才能「零配置」写入。<br>
+          把下面的提示词整段复制，发给任意 AI（或发给帮你在飞书里建表的人），它会按规格把表建好。
+        </p>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-copy-prompt" style="width:auto;padding:10px 20px;">📋 复制提示词</button>
+          <span id="copy-status" style="font-size:12px;color:#51cf66;align-self:center;"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">表结构速查（共 14 个字段）</div>
+        <p class="card-desc">手工建表时照这张表填即可。字段名必须完全一致。</p>
+        <div style="overflow-x:auto;margin-top:8px;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="background:rgba(255,255,255,0.06);">
+                <th style="text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.1);">字段名</th>
+                <th style="text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.1);">类型</th>
+                <th style="text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.1);">选项 / 说明</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">选题标题</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">文本</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;">主字段（第一列）</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">多行文本</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">文本</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;">正文，最长约 15000 字</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">作者/来源</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">文本</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;"></td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">来源平台</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">单选</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#ffd43b;">小红书 / YouTube / 网页</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">来源链接</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">超链接</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;"></td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">选题来源</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">单选</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#ffd43b;">浏览器收录 / 链接收录 / 图片收录 / 批量收录</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">素材图片</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">附件</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;">仅图片</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">标签</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#ffd43b;">多选</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;">格式 #标签，无需预建选项</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">发布时间</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">日期</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;">格式 yyyy/MM/dd HH:mm</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">点赞数</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">数字</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;">小数位 0</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">收藏数</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">数字</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;">小数位 0</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">评论数</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">数字</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#868e96;">小数位 0</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">状态</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);">单选</td><td style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.05);color:#ffd43b;">待选题 / 已选题 / 已完成</td></tr>
+              <tr><td style="padding:6px 8px;">优先级</td><td style="padding:6px 8px;">单选</td><td style="padding:6px 8px;color:#ffd43b;">高 / 中 / 低</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="card-desc" style="color:#ffd43b;margin-top:10px;">
+          ⚠️ 黄色标注的是单选/多选字段，选项必须预先建全 —— 否则写入时会报错 1254062，数据写不进去。
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">提示词全文（可手动复制）</div>
+        <pre id="prompt-text" style="white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;font-size:11px;line-height:1.6;color:#ced4da;margin-top:8px;">加载中…</pre>
+      </div>
+    </section>
+
+    <!-- Tab 5: 关于 -->
     <section class="tab-content" id="tab-about">
       <div class="card">
-        <div class="card-title">前程智囊团 · 浏览器素材采集插件</div>
+        <div class="card-title">前程-灵感素材库 · 浏览器插件</div>
         <p class="card-desc" style="line-height:1.8;">
-          版本：<strong id="about-version">v4.0.14</strong><br>
+          版本：<strong id="about-version">v4.1.0</strong><br>
           开源地址：<a href="https://github.com/pengqiancheng-sys/xhs-collector" target="_blank">GitHub</a><br>
           许可证：MIT<br><br>
-          一键采集小红书 / YouTube / 网页素材，自动同步到飞书多维表格。<br>
-          支持自定义飞书应用、表格、字段映射，适用于任何团队的工作流。
+          把网页上的标题、正文、图片整理进你的飞书多维表格。<br>
+          支持自定义飞书应用、表格与字段映射，适用于任何团队的工作流。
+        </p>
+        <p class="card-desc" style="color:#868e96;margin-top:10px;line-height:1.7;">
+          使用提示：本工具用于个人素材归档与整理。请遵守你访问的网站的服务条款，<br>
+          并自行确认所收藏内容的合规使用范围。
         </p>
         <div class="btn-row" style="margin-top:12px;">
           <button class="btn btn-danger btn-sm" id="btn-reset-config">🔄 重置所有配置</button>

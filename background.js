@@ -1,10 +1,10 @@
-// 前程智囊团 v4.0.5 — 可配置化架构
+// 前程-灵感素材库 v4.1 — 可配置化架构
 // 所有飞书凭证、表信息、字段映射 均从 chrome.storage 动态读取
 
 const FEISHU_AUTH = 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal';
 const UPDATE_URL = 'https://raw.githubusercontent.com/pengqiancheng-sys/xhs-collector/main/manifest.json';
 
-// ====== 默认配置（前程智囊团内置，可被用户覆盖） ======
+// ====== 默认配置（内置，可被用户覆盖） ======
 const DEFAULT_CONFIG = {
   appId: '',
   appSecret: '',
@@ -31,7 +31,7 @@ const DEFAULT_CONFIG = {
   defaults: {
     '状态': '待选题',
     '优先级': '中',
-    '选题来源': '浏览器采集',
+    '选题来源': '浏览器收录',
   },
   // 表格字段列表（自动探测填充，用于设置页展示）
   tableFields: [],
@@ -67,7 +67,7 @@ let config = { ...DEFAULT_CONFIG };
   chrome.storage.onChanged.addListener(onStorageChange);
   setInterval(processQueue, 1000);
   initUpdate();
-  console.log('🚀 前程智囊团 v4.0.14 可配置版');
+  console.log('🚀 前程-灵感素材库 v4.1.0');
 })();
 
 async function loadConfig() {
@@ -113,9 +113,9 @@ function onStorageChange(changes, area) {
 
 function setupMenus() {
   chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({ id: 'qc-page', title: '📦 采集页面', contexts: ['page'] });
-    chrome.contextMenus.create({ id: 'qc-link', title: '🔗 采集链接', contexts: ['link'] });
-    chrome.contextMenus.create({ id: 'qc-image', title: '🖼️ 采集图片', contexts: ['image'] });
+    chrome.contextMenus.create({ id: 'qc-page', title: '📦 收进灵感素材库', contexts: ['page'] });
+    chrome.contextMenus.create({ id: 'qc-link', title: '🔗 收藏这个链接', contexts: ['link'] });
+    chrome.contextMenus.create({ id: 'qc-image', title: '🖼️ 收藏这张图片', contexts: ['image'] });
   });
   chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (info.menuItemId === 'qc-page') enqueue({ type: 'capture-page', tabId: tab?.id });
@@ -643,7 +643,7 @@ async function capturePage(t) {
       const r = await chrome.scripting.executeScript({
         target: { tabId: t.tabId },
         func: () => {
-          const s = window.__QIANCHENG_XHS_RESPONSES__ || [];
+          const s = window.__QIANCHENG_IDEAHUB_RESPONSES__ || [];
           return s.filter(r => r.note).pop()?.note || null;
         },
         world: 'MAIN',
@@ -764,7 +764,7 @@ async function capturePage(t) {
     author: author || '',
     platform,
     sourceUrl: sourceUrl || '',
-    sourceType: '浏览器采集',
+    sourceType: '浏览器收录',
     images: fileTokens.length ? fileTokens : undefined,
     tags: (() => { const dom = domData.tags || []; const api = (apiData?.tags?.length ? apiData.tags : pageInfo?.tags || []).map(t => { const v = String(t || '').trim().replace(/^#+/, ''); return v ? '#' + v : ''; }).filter(Boolean); const all = [...dom, ...api]; return [...new Set(all)].filter(Boolean); })(),
     publishTime: domData.time || apiData?.publish_time || pageInfo?.publishTime || 0,
@@ -786,7 +786,7 @@ async function captureLink(t) {
     author: '',
     platform: '网页',
     sourceUrl: t.url || '',
-    sourceType: '链接采集',
+    sourceType: '链接收录',
   };
   await feishuWrite(captureData);
 }
@@ -798,70 +798,131 @@ async function captureImage(t) {
     try { fileToken = await uploadImage(t.url); } catch(e) { console.warn(e.message); }
   }
   const captureData = {
-    title: '图片采集',
+    title: '图片收藏',
     text: t.pageUrl || t.url || '',
     author: '',
     platform: '网页',
     sourceUrl: t.pageUrl || t.url || '',
-    sourceType: '图片采集',
+    sourceType: '图片收录',
     images: fileToken ? [{ file_token: fileToken }] : undefined,
   };
   await feishuWrite(captureData);
 }
 
-// ====== 博主批量采集 ======
-async function collectBlogger(t) {
-  const tabId = t.tabId;
-  const limit = t.limit || 30;
-  const interval = config.collectIntervalMs || 2500;
+// ====== 等待标签页真正加载完成 ======
+function waitForTabLoad(tabId, timeout = 20000) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      chrome.tabs.onUpdated.removeListener(listener);
+      clearTimeout(timer);
+      resolve();
+    };
+    const listener = (id, info) => { if (id === tabId && info.status === 'complete') done(); };
+    chrome.tabs.onUpdated.addListener(listener);
+    const timer = setTimeout(done, timeout);
+  });
+}
 
-  // 获取博主页面上的笔记列表
+// ====== 博主批量收录 ======
+// 已修复：
+//  1) 列表提取前自动滚动加载（原实现只取首屏，limit 形同虚设）
+//  2) 改用后台标签页工作，不再抢占用户当前标签
+//  3) 等页面真正加载完成，不再靠固定 sleep 猜
+//  4) 「间隔(秒)」参数真正生效（原来被消息路由丢弃 + 后台读错配置项）
+//  5) 失败逐条记入可视日志，完成日志按实际成功率区分级别
+async function collectBlogger(t) {
+  const srcTabId = t.tabId;
+  const limit = t.limit || 20;
+  // 间隔：优先用侧边栏传入的秒数，其次回落到设置页的毫秒值
+  const interval = t.interval ? Math.round(Number(t.interval) * 1000) : (config.collectIntervalMs || 2500);
+
+  // ---- 1. 抓取博主主页的笔记 ID（自动滚动加载） ----
   let noteIds = [];
   try {
     const r = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: (maxItems) => {
-        const ids = [];
-        const links = document.querySelectorAll('a[href*="/explore/"], a[href*="/discovery/item/"]');
-        links.forEach(a => {
-          const match = (a.href || '').match(/\/(explore|discovery\/item)\/([A-Za-z0-9]+)/);
-          if (match?.[2] && !ids.includes(match[2])) ids.push(match[2]);
-          if (ids.length >= maxItems) return;
-        });
+      target: { tabId: srcTabId },
+      func: async (maxItems) => {
+        const wait = ms => new Promise(res => setTimeout(res, ms));
+        const harvest = () => {
+          const ids = [];
+          const links = document.querySelectorAll('a[href*="/explore/"], a[href*="/discovery/item/"]');
+          for (const a of links) {
+            const m = (a.href || '').match(/\/(explore|discovery\/item)\/([A-Za-z0-9]+)/);
+            if (m?.[2] && !ids.includes(m[2])) ids.push(m[2]);
+          }
+          return ids;
+        };
+        let ids = harvest();
+        let stale = 0;
+        // 无限滚动：滚到底 → 等懒加载 → 再看有无新增；连续 3 轮无新增即停
+        for (let i = 0; i < 40 && ids.length < maxItems && stale < 3; i++) {
+          window.scrollTo(0, document.documentElement.scrollHeight);
+          await wait(1200);
+          const next = harvest();
+          if (next.length > ids.length) { ids = next; stale = 0; } else { stale++; }
+        }
+        window.scrollTo(0, 0);
         return ids.slice(0, maxItems);
       },
       args: [limit],
     });
     if (r?.[0]?.result) noteIds = r[0].result;
-  } catch(e) { console.warn('blogger list:', e.message); }
+  } catch(e) {
+    addLog('fail', `❌ 读取博主笔记列表失败: ${e.message}`, 'error');
+  }
 
-  if (!noteIds.length) throw new Error('未找到笔记');
+  if (!noteIds.length) throw new Error('未找到笔记（请确认已登录且停留在博主主页）');
 
-  addLog('collect', `🚀 博主 ${noteIds.length} 篇`, 'info');
   const total = noteIds.length;
-  let saved = 0;
+  addLog('collect', `🚀 博主批量收录 ${total} 篇`, 'info');
 
+  // ---- 2. 用后台标签页逐篇收录，不打扰用户当前浏览 ----
+  let workTabId = null;
+  let createdTab = false;
+  try {
+    const tab = await chrome.tabs.create({ url: 'about:blank', active: false });
+    workTabId = tab.id;
+    createdTab = true;
+  } catch(e) {
+    workTabId = srcTabId;   // 建不了后台标签就退回原标签
+  }
+
+  let saved = 0;
   t.progress = { total, saved: 0 };
   broadcast();
 
-  for (let i = 0; i < total; i++) {
-    const noteUrl = `https://www.xiaohongshu.com/explore/${noteIds[i]}`;
-    try {
-      await chrome.tabs.update(tabId, { url: noteUrl });
-      await sleep(interval + 2000); // 等待页面加载
-
-      // 临时入队单篇采集
-      const subTask = { type: 'capture-page', tabId, url: noteUrl, title: noteIds[i] };
-      await capturePage(subTask);
-      saved++;
-    } catch(e) {
-      console.warn(`blogger ${i}:`, e.message);
+  try {
+    for (let i = 0; i < total; i++) {
+      const noteUrl = `https://www.xiaohongshu.com/explore/${noteIds[i]}`;
+      try {
+        await chrome.tabs.update(workTabId, { url: noteUrl });
+        await waitForTabLoad(workTabId);
+        await sleep(interval);   // 再留时间给接口拦截与正文渲染
+        await capturePage({ type: 'capture-page', tabId: workTabId, url: noteUrl, title: noteIds[i] });
+        saved++;
+      } catch(e) {
+        addLog('fail', `❌ 第 ${i + 1}/${total} 篇失败: ${e.message}`, 'warn');
+      }
+      t.progress = { total, saved };
+      broadcast();
     }
-    t.progress = { total, saved };
-    broadcast();
+  } finally {
+    if (createdTab && workTabId != null) {
+      try { await chrome.tabs.remove(workTabId); } catch {}
+    }
   }
 
-  addLog('done', `✅ 博主采集完成 ${saved}/${total}`, 'success');
+  // ---- 3. 按实际成功率给出日志级别（原来无论成败都报绿色成功） ----
+  if (saved === total) {
+    addLog('done', `✅ 博主批量收录完成 ${saved}/${total}`, 'success');
+  } else if (saved > 0) {
+    addLog('done', `⚠️ 博主批量收录部分完成 ${saved}/${total}，失败项见上方日志`, 'warn');
+  } else {
+    addLog('done', `❌ 博主批量收录全部失败 0/${total}`, 'error');
+  }
 }
 
 // ====== 批量链接采集 ======
@@ -869,7 +930,7 @@ async function collectBatch(t) {
   const urls = t.urls || [];
   if (!urls.length) throw new Error('no urls');
 
-  addLog('collect', `🚀 批量采集 ${urls.length} 个链接`, 'info');
+  addLog('collect', `🚀 批量收录 ${urls.length} 个链接`, 'info');
   const total = urls.length;
   let saved = 0;
 
@@ -884,7 +945,7 @@ async function collectBatch(t) {
         author: '',
         platform: '网页',
         sourceUrl: urls[i],
-        sourceType: '批量采集',
+        sourceType: '批量收录',
       };
       await feishuWrite(captureData);
       saved++;
@@ -896,7 +957,7 @@ async function collectBatch(t) {
     await sleep(config.collectIntervalMs || 2500);
   }
 
-  addLog('done', `✅ 批量采集完成 ${saved}/${total}`, 'success');
+  addLog('done', `✅ 批量收录完成 ${saved}/${total}`, 'success');
 }
 
 // ====== 日志 ======
@@ -923,129 +984,6 @@ function handleMessage(msg, sender, sendResponse) {
       case 'sidepanel:get-context': {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         let pageInfo = {};
-  // 直接从 DOM 获取完整数据（RedBox 同款方式：作者/互动/时间/标签）
-  let domData = {};
-  try {
-    const r = await chrome.scripting.executeScript({
-      target: { tabId: t.tabId },
-      func: () => {
-        function parseCount(v) {
-          if (!v) return 0;
-          var s = String(v).trim().replace(/[\s,]/g, '').replace(/[^0-9.\u4e00-\u9fa5]/g, '');
-          if (!s) return 0;
-          if (s.includes('万')) { var n = parseFloat(s.replace('万', '')); return isNaN(n) ? 0 : Math.round(n * 10000); }
-          var n = parseFloat(s); return isNaN(n) ? 0 : Math.round(n);
-        }
-        function getDomTime(root) {
-          var sels = ['.date', '[class*="date"]', '.publish-time', '[class*="time"]', 'time', '.bottom-container .date'];
-          var scope = root || document;
-          for (var i = 0; i < sels.length; i++) {
-            var el = scope.querySelector(sels[i]);
-            if (!el) continue;
-            var raw = (el.textContent || '').trim();
-            if (!raw) continue;
-            var now = new Date();
-            var mm = raw.match(/(\d+)\s*分钟前/); if (mm) return now.getTime() - Number(mm[1]) * 60000;
-            var hh = raw.match(/(\d+)\s*小时前/); if (hh) return now.getTime() - Number(hh[1]) * 3600000;
-            var dd = raw.match(/(\d+)\s*天前/); if (dd) return now.getTime() - Number(dd[1]) * 86400000;
-            var ymd = raw.match(/(20\d{2})[-\/.年](\d{1,2})[-\/.月](\d{1,2})/);
-            if (ymd) return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])).getTime();
-            var md = raw.match(/(\d{1,2})[-\/.月](\d{1,2})/);
-            if (md) return new Date(new Date().getFullYear(), Number(md[1]) - 1, Number(md[2])).getTime();
-          }
-          return 0;
-        }
-        // === RedBox 同款：先定位当前笔记弹窗根元素 ===
-        function getActiveMask() {
-          var masks = document.querySelectorAll('.note-detail-mask[note-id]');
-          if (masks.length) return masks[0];
-          masks = document.querySelectorAll('.note-detail-mask');
-          for (var i = 0; i < masks.length; i++) {
-            var style = window.getComputedStyle(masks[i]);
-            if (style.display !== 'none' && style.visibility !== 'hidden') return masks[i];
-          }
-          return null;
-        }
-        function getNoteRoot() {
-          var mask = getActiveMask();
-          if (mask) {
-            var scoped = mask.querySelector('#noteContainer.note-container') || mask.querySelector('#noteContainer') || mask.querySelector('.note-container');
-            if (scoped) return scoped;
-            return mask;
-          }
-          // 兜底：从正文锚点往上找
-          var anchor = document.querySelector('#detail-desc') || document.querySelector('#detail-title') || document.querySelector('.note-content');
-          if (!anchor) return document.body;
-          return anchor.closest('#noteContainer.note-container') || anchor.closest('#noteContainer') || anchor.closest('.note-container') || anchor.closest('.note-detail-mask') || document.body;
-        }
-        // === 在根元素范围内查找作者 ===
-        function getAuthor(root) {
-          var sels = ['.author .username', '.author-wrapper .username', '.username'];
-          var scope = root || document;
-          for (var i = 0; i < sels.length; i++) {
-            var el = scope.querySelector(sels[i]);
-            if (el) { var t = (el.innerText || el.textContent || '').trim(); if (t) return t; }
-          }
-          return '';
-        }
-        // === 在根元素范围内查找互动数据 ===
-        function findInRoot(root, sels) {
-          var scope = root || document;
-          for (var i = 0; i < sels.length; i++) {
-            var els = scope.querySelectorAll(sels[i]);
-            for (var j = 0; j < els.length; j++) {
-              var el = els[j];
-              if (el.closest('[class*="comment"]') || el.closest('.comments-el') || el.closest('.comment-container') || el.closest('.comment-list') || el.closest('.comment-item')) continue;
-              var t = (el.textContent || '').trim();
-              if (t) return t;
-            }
-          }
-          return '';
-        }
-        // === 从正文文本中提取 #标签（RedBox 同款） ===
-        function extractTags(text) {
-          var tags = [];
-          var seen = {};
-          var tokens = String(text || '').split('#').slice(1);
-          for (var i = 0; i < tokens.length; i++) {
-            var candidate = tokens[i].split(/\r?\n/, 1)[0].split(/\s+/, 1)[0].replace(/^[#]+|[，,。.！!？?【】 ]+$/g, '').trim();
-            if (candidate && !seen[candidate]) { seen[candidate] = true; tags.push('#' + candidate); }
-          }
-          return tags;
-        }
-
-        var root = getNoteRoot();
-        var author = getAuthor(root);
-        // 互动：只在当前笔记弹窗范围内查找
-        var likes = parseCount(findInRoot(root, ['.like-wrapper .count', '[class*="like-wrapper"] .count', '[class*="like"] .count']));
-        var collects = parseCount(findInRoot(root, ['.collect-wrapper .count', '[class*="collect-wrapper"] .count', '[class*="collect"] .count']));
-        var comments = parseCount(findInRoot(root, ['.chat-wrapper .count', '.comment-wrapper .count', '.engage-bar [class*="comment"] .count', '.interactions [class*="comment"] .count']));
-        // 正文：只在当前笔记弹窗范围内查找
-        var domText = '';
-        var textEls = (root || document).querySelectorAll('#detail-desc .note-text, .desc .note-text, .note-content .note-text');
-        if (textEls.length) {
-          var parts = [];
-          for (var k = 0; k < textEls.length; k++) { var p = (textEls[k].innerText || textEls[k].textContent || '').trim(); if (p) parts.push(p); }
-          domText = parts.join('\n\n');
-        }
-        if (!domText) {
-          var meta = document.querySelector('meta[property="og:description"]');
-          if (meta) domText = (meta.getAttribute('content') || '').trim();
-        }
-        return {
-          author: author,
-          text: domText,
-          tags: extractTags(domText),
-          likes: likes,
-          collects: collects,
-          comments: comments,
-          time: getDomTime(root),
-        };
-      },
-    });
-    if (r?.[0]?.result) domData = r[0].result;
-  } catch(e) {}
-
         if (tab?.id) { try { pageInfo = await chrome.tabs.sendMessage(tab.id, { type: 'extract-page' }); } catch {} }
         const up = (await chrome.storage.local.get(['updateState'])).updateState || {};
         sendResponse({
@@ -1071,9 +1009,14 @@ function handleMessage(msg, sender, sendResponse) {
 
       case 'capture:collect-blogger': {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!tab?.id) { sendResponse({ success: false, error: 'no tab' }); break; }
-        enqueue({ type: 'collect-blogger', tabId: tab.id, limit: msg.limit || 30 });
-        sendResponse({ success: true, message: '批量采集已入队', queueLen: taskQueue.length });
+        if (!tab?.id) { sendResponse({ success: false, error: '未找到当前标签页' }); break; }
+        enqueue({
+          type: 'collect-blogger',
+          tabId: tab.id,
+          limit: msg.limit || 20,
+          interval: msg.interval,          // 修复：原来这里把侧边栏传来的 interval 直接丢弃了
+        });
+        sendResponse({ success: true, message: '批量收录已入队', queueLen: taskQueue.length });
         break;
       }
 

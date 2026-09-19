@@ -1,4 +1,4 @@
-// 前程智囊团 v4.0 Side Panel
+// 前程-灵感素材库 v4.1 Side Panel
 (() => {
   const el = {};
   let context = null;
@@ -15,7 +15,6 @@
     el.imagePreview = document.getElementById('image-preview');
     el.apiBadge = document.getElementById('api-badge');
     el.btnSavePage = document.getElementById('btn-save-page');
-    el.btnSaveXhs = document.getElementById('btn-save-xhs');
     el.captureStatus = document.getElementById('capture-status');
     el.bloggerPanel = document.getElementById('blogger-panel');
     el.bloggerLimit = document.getElementById('blogger-limit');
@@ -33,7 +32,6 @@
     el.btnSettings = document.getElementById('btn-settings');
 
     el.btnSavePage.addEventListener('click', () => doCapture('capture:save-page'));
-    el.btnSaveXhs.addEventListener('click', () => doCapture('capture:save-page'));
     el.btnBloggerStart.addEventListener('click', doBlogger);
     el.btnSettings.addEventListener('click', openSettings);
     el.btnCheckUpdate.addEventListener('click', checkUpdate);
@@ -43,7 +41,7 @@
         renderQueue(msg);
         renderLogs(msg.logs || []);
         if (msg.last?.type === 'capture-page' && msg.last?.status === 'completed') {
-          setStatus('success', '✅ 已采集并写入飞书');
+          setStatus('success', '✅ 已收录并写入飞书');
         }
         if (msg.active?.type === 'collect-blogger' && msg.active?.progress) {
           renderBloggerProgress(msg.active.progress);
@@ -89,8 +87,8 @@
   function renderPage(tab, pi) {
     if (!tab?.url) {
       el.platformBadge.innerHTML = '🌐 请打开页面';
-      el.pageTitle.textContent = '打开小红书、YouTube 或网页';
-      el.btnSavePage.disabled = true; el.btnSaveXhs.disabled = true;
+      el.pageTitle.textContent = '打开小红书、YouTube 或任意网页';
+      el.btnSavePage.disabled = true;
       return;
     }
     const e = pi?.platform === 'xhs' ? '🔴' : pi?.platform === 'youtube' ? '▶️' : '🌐';
@@ -104,12 +102,10 @@
     el.bloggerPanel.classList.toggle('hidden', !isProfile);
     const ok = !!context?.config?.hasConfig;
     el.btnSavePage.disabled = !ok;
-    el.btnSaveXhs.disabled = !ok || pi?.platform !== 'xhs';
   }
 
   async function doCapture(type) {
     el.btnSavePage.disabled = true;
-    el.btnSaveXhs.disabled = true;
     setStatus('pending', '⏳ 已加入任务队列...');
     try {
       const r = await send({ type });
@@ -117,7 +113,6 @@
     } catch(e) {
       setStatus('error', e.message);
       el.btnSavePage.disabled = false;
-      el.btnSaveXhs.disabled = false;
     }
   }
 
@@ -127,9 +122,9 @@
     el.bloggerProgressLabel.textContent = '已加入队列...';
     try {
       const limit = parseInt(el.bloggerLimit.value) || 20;
-      const interval = parseFloat(document.getElementById('blogger-interval').value) || 2;
+      const interval = parseFloat(el.bloggerInterval.value) || 2;
       const r = await send({ type: 'capture:collect-blogger', limit, interval });
-      if (!r.success) throw new Error(r.error || '批量采集失败');
+      if (!r.success) throw new Error(r.error || '批量收录失败');
     } catch(e) {
       setStatus('error', e.message);
       el.btnBloggerStart.disabled = false;

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "前程智囊团 · 素材采集",
-  "version": "4.0.14",
-  "description": "可配置飞书多维表格的小红书/YouTube/网页采集插件。支持自定义字段映射、自动表结构探测、多表格切换。",
+  "name": "前程-灵感素材库",
+  "version": "4.1.0",
+  "description": "把网页上的标题、正文、图片整理进你的飞书多维表格。支持自定义字段映射、自动表结构探测与多表格切换。",
   "permissions": [
     "activeTab",
     "alarms",
@@ -60,7 +60,7 @@
     }
   ],
   "action": {
-    "default_title": "前程智囊团 · 素材采集",
+    "default_title": "前程-灵感素材库",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
@@ -75,6 +75,5 @@
   "side_panel": {
     "default_path": "sidepanel.html"
   },
-  "options_page": "settings.html",
-  "update_url": "https://raw.githubusercontent.com/pengqiancheng-sys/xhs-collector/main/manifest.json"
+  "options_page": "settings.html"
 }

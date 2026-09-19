@@ -1,15 +1,15 @@
-// 前程智囊团 v4.0 — 设置页脚本
+// 前程-灵感素材库 v4.1 — 设置页脚本
 (() => {
   let config = null;
 
-  // 采集数据的字段定义（供映射使用）
+  // 收藏数据的字段定义（供映射使用）
   const CAPTURE_FIELDS = [
     { key: 'title', label: '笔记标题', desc: 'apiData.title || pageInfo.title' },
     { key: 'text', label: '正文内容', desc: 'apiData.desc || DOM正文' },
     { key: 'author', label: '作者/来源', desc: 'apiData.author.nickname || DOM作者' },
     { key: 'platform', label: '来源平台', desc: '小红书 / YouTube / 网页' },
     { key: 'sourceUrl', label: '来源链接', desc: '笔记URL（超链接字段）' },
-    { key: 'sourceType', label: '采集方式', desc: '浏览器采集 / 链接采集 / 批量采集' },
+    { key: 'sourceType', label: '收录方式', desc: '浏览器收录 / 链接收录 / 批量收录' },
     { key: 'images', label: '素材图片', desc: '笔记图片（附件字段）' },
     { key: 'tags', label: '标签', desc: '话题标签（自动补 #）' },
     { key: 'publishTime', label: '发布时间', desc: '小红书笔记发布时间' },
@@ -29,6 +29,7 @@
     await loadConfig();
     renderAll();
     setupEvents();
+    setupPromptTab();
   }
 
   function bindElements() {
@@ -41,6 +42,7 @@
       'btn-export-config','btn-import-config','btn-save-all',
       'connection-result','save-status','mapping-list','defaults-list',
       'import-file','version-tag','about-version',
+      'btn-copy-prompt','copy-status','prompt-text',
     ];
     ids.forEach(id => {
       DOM[id] = document.getElementById(id);
@@ -405,7 +407,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'xhs-collector-config.json';
+      a.download = 'idea-hub-config.json';
       a.click();
       URL.revokeObjectURL(url);
       showSaveStatus('saved', '配置已导出（不含密钥）');
@@ -456,6 +458,46 @@
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.getElementById(`tab-${tabId}`).classList.add('active');
       });
+    });
+  }
+
+  // ====== 建表提示词 Tab ======
+  async function setupPromptTab() {
+    const box = DOM['prompt-text'];
+    const btn = DOM['btn-copy-prompt'];
+    const status = DOM['copy-status'];
+
+    // 从包内 setup-prompt.txt 读取提示词全文（不写死在 HTML 里，方便以后替换）
+    try {
+      const res = await fetch(chrome.runtime.getURL('setup-prompt.txt'));
+      box.textContent = await res.text();
+    } catch(e) {
+      box.textContent = '提示词文件读取失败，请确认扩展目录下存在 setup-prompt.txt。';
+      console.error('setupPromptTab:', e);
+    }
+
+    btn.addEventListener('click', async () => {
+      const text = box.textContent || '';
+      try {
+        await navigator.clipboard.writeText(text);
+        status.textContent = '✅ 已复制，去粘给 AI 吧';
+      } catch (e) {
+        // 剪贴板 API 不可用时的兜底方案
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          status.textContent = '✅ 已复制，去粘给 AI 吧';
+        } catch (e2) {
+          status.textContent = '⚠️ 复制失败，请手动选中下方文本复制';
+        }
+      }
+      setTimeout(() => { status.textContent = ''; }, 3000);
     });
   }
 
