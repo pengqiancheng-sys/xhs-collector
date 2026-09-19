@@ -1,4 +1,4 @@
-// 前程-灵感素材库 v4.1 — 可配置化架构
+// 前程-灵感素材库 v4.2 — 可配置化架构
 // 所有飞书凭证、表信息、字段映射 均从 chrome.storage 动态读取
 
 const FEISHU_AUTH = 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal';
@@ -67,7 +67,7 @@ let config = { ...DEFAULT_CONFIG };
   chrome.storage.onChanged.addListener(onStorageChange);
   setInterval(processQueue, 1000);
   initUpdate();
-  console.log('🚀 前程-灵感素材库 v4.1.2');
+  console.log('🚀 前程-灵感素材库 v4.2.0');
 })();
 
 async function loadConfig() {
@@ -238,6 +238,129 @@ async function fetchTableFields(appToken, tableId, appId, appSecret) {
     return { success: true, fields };
   } catch (e) {
     return { success: false, error: e.message };
+  } finally {
+    config.appId = savedAppId;
+    config.appSecret = savedSecret;
+    accessToken = null; tokenExpiresAt = 0;
+  }
+}
+
+// ====== 一键建表：新建多维表格 + 一张带齐 14 个字段的数据表 ======
+// 为什么让应用自己建表：应用对自己创建的 Base 天然有管理权限，省掉
+// 「在飞书里把应用添加为该文档的协作者」这一步 —— 少了它读写会报 1254302。
+const ITABLE_NAME = '素材收集表';
+
+// 字段规格必须与 setup-prompt.txt / README 给用户的规格逐字一致。
+// type: 1 文本 / 2 数字 / 3 单选 / 4 多选 / 5 日期 / 15 超链接 / 17 附件
+// ⚠️ 「来源平台」这里是 3 个选项（比给手动建表的规格多一个 YouTube）：
+//    多一个闲置选项没有任何代价，但少了它、一旦收到 YouTube 页面就会报 1254062 写不进去。
+const ITABLE_FIELDS = [
+  { field_name: '选题标题', type: 1 },
+  { field_name: '多行文本', type: 1 },
+  { field_name: '作者/来源', type: 1 },
+  { field_name: '来源平台', type: 3, property: { options: [
+    { name: '小红书' }, { name: '网页' }, { name: 'YouTube' }] } },
+  { field_name: '来源链接', type: 15 },
+  { field_name: '选题来源', type: 3, property: { options: [
+    { name: '浏览器收录' }, { name: '链接收录' }, { name: '图片收录' }, { name: '批量收录' }] } },
+  { field_name: '素材图片', type: 17 },
+  { field_name: '标签', type: 4 },
+  { field_name: '发布时间', type: 5 },
+  { field_name: '点赞数', type: 2, property: { formatter: '0' } },
+  { field_name: '收藏数', type: 2, property: { formatter: '0' } },
+  { field_name: '评论数', type: 2, property: { formatter: '0' } },
+  { field_name: '状态', type: 3, property: { options: [
+    { name: '待选题' }, { name: '已选题' }, { name: '已完成' }] } },
+  { field_name: '优先级', type: 3, property: { options: [
+    { name: '高' }, { name: '中' }, { name: '低' }] } },
+];
+
+async function createItableTable(appToken, fields) {
+  // 先试「一次请求把字段全带上」——最干净
+  try {
+    const t = await feishuRequest(`bitable/v1/apps/${appToken}/tables`, {
+      method: 'POST',
+      body: JSON.stringify({
+        table: { name: ITABLE_NAME, default_view_name: '表格', fields },
+      }),
+    });
+    const tableId = t.data?.table_id || '';
+    if (!tableId) throw new Error('飞书没有返回 table_id');
+    return { tableId, failed: [] };
+  } catch (e) {
+    // 兜底：某个字段的 property 不被接受会导致整个请求失败。
+    // 改成先建只带主字段的表，再逐个补 —— 坏的字段还能再去掉 property 重试一次。
+    const t2 = await feishuRequest(`bitable/v1/apps/${appToken}/tables`, {
+      method: 'POST',
+      body: JSON.stringify({
+        table: { name: ITABLE_NAME, default_view_name: '表格',
+          fields: [{ field_name: fields[0].field_name, type: fields[0].type }] },
+      }),
+    });
+    const tableId = t2.data?.table_id || '';
+    if (!tableId) throw new Error(`建表失败：${e.message}`);
+    const failed = [];
+    for (const f of fields.slice(1)) {
+      try {
+        await feishuRequest(`bitable/v1/apps/${appToken}/tables/${tableId}/fields`, {
+          method: 'POST', body: JSON.stringify(f),
+        });
+      } catch (e2) {
+        try {
+          await feishuRequest(`bitable/v1/apps/${appToken}/tables/${tableId}/fields`, {
+            method: 'POST', body: JSON.stringify({ field_name: f.field_name, type: f.type }),
+          });
+        } catch (e3) { failed.push(f.field_name); }
+      }
+    }
+    return { tableId, failed };
+  }
+}
+
+async function createItable(appId, appSecret) {
+  const savedAppId = config.appId;
+  const savedSecret = config.appSecret;
+  config.appId = appId || savedAppId;
+  config.appSecret = appSecret || savedSecret;
+  accessToken = null; tokenExpiresAt = 0;
+
+  try {
+    if (!config.appId || !config.appSecret) throw new Error('请先完成凭证配置');
+
+    // 1) 建多维表格（Base）
+    const created = await feishuRequest('bitable/v1/apps', {
+      method: 'POST',
+      body: JSON.stringify({ name: '前程-灵感素材库', folder_token: '' }),
+    });
+    const app = created.data?.app || {};
+    const appToken = app.app_token || '';
+    const defaultTableId = app.default_table_id || '';
+    if (!appToken) throw new Error('飞书没有返回 app_token');
+
+    // 2) 建数据表并带齐字段
+    const { tableId, failed } = await createItableTable(appToken, ITABLE_FIELDS);
+
+    // 3) 清掉 Base 自带的默认数据表（用接口返回的 default_table_id 精确匹配，
+    //    绝不用「名字像默认表」这种模糊判断，避免误删刚建好的表）
+    let cleaned = false;
+    if (defaultTableId && defaultTableId !== tableId) {
+      try {
+        await feishuRequest(`bitable/v1/apps/${appToken}/tables/${defaultTableId}`, { method: 'DELETE' });
+        cleaned = true;
+      } catch (e) { /* 删不掉不影响使用，留个空表而已 */ }
+    }
+
+    return {
+      success: true,
+      appToken, tableId, tableName: ITABLE_NAME,
+      url: `https://feishu.cn/base/${appToken}?table=${tableId}`,
+      fieldCount: ITABLE_FIELDS.length - failed.length,
+      total: ITABLE_FIELDS.length,
+      failed,
+      cleaned,
+    };
+  } catch (e) {
+    return { success: false, error: describeAuthError(e.message, config.appId) };
   } finally {
     config.appId = savedAppId;
     config.appSecret = savedSecret;
@@ -1100,6 +1223,17 @@ function handleMessage(msg, sender, sendResponse) {
           sendResponse(result);
         } catch(e) {
           sendResponse({ success: false, error: e.message });
+        }
+        break;
+      }
+
+      // 一键建表：新建多维表格 + 带齐 14 个字段的数据表
+      case 'settings:create-itable': {
+        try {
+          const result = await createItable(msg.appId, msg.appSecret);
+          sendResponse(result);
+        } catch(e) {
+          sendResponse({ success: false, error: describeAuthError(e.message, config.appId) });
         }
         break;
       }

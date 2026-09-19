@@ -1,4 +1,4 @@
-// 前程-灵感素材库 v4.1 — 设置页脚本
+// 前程-灵感素材库 v4.2 — 设置页脚本
 (() => {
   let config = null;
 
@@ -56,6 +56,9 @@
       'ws-1','ws-2','ws-3','btn-check-update','update-box','update-detail','cur-version',
       'btn-open-platform','btn-probe-feishu',
       'feishu-detected','feishu-detected-list','btn-open-app-baseinfo','btn-clear-detected',
+      'btn-auth-create','btn-auth-bind','btn-auth-open','btn-auth-cancel','auth-status','auth-extra',
+      'btn-open-app-auth','btn-open-app-version',
+      'btn-build-table','itable-result','itable-link',
     ];
     ids.forEach(id => {
       DOM[id] = document.getElementById(id);
@@ -482,11 +485,13 @@
   }
 
   // ====== 配置向导 ======
-  const PERM_TEXT = `请在飞书开放平台为你的应用开通以下权限（左侧「权限管理」里搜索关键词开通）：
+  const PERM_TEXT = `请在飞书开放平台为你的应用开通以下权限（左侧「权限管理」里搜索关键词或权限点标识开通）：
 
-1. 多维表格 — 查看
-2. 多维表格 — 查看、评论、编辑和管理
-3. 云空间 — 查看、评论、编辑和管理云空间中所有文件
+1. 多维表格 — 查看、评论、编辑和管理        （权限点：bitable:app）
+2. 云空间 — 查看、评论、编辑和管理云空间中所有文件（权限点：drive:drive）
+
+说明：只要这两个就够了。建表、读字段、写记录都靠 bitable:app；
+上传图片素材靠 drive:drive。别只开「多维表格 — 查看」，那是只读的，写不进去。
 
 ⚠️ 开完权限后，必须去「版本管理与发布」创建一个版本并发布，权限才会真正生效。
    不发布版本 = 接口一直返回「权限不足」，这是最常见的坑。`;
@@ -648,6 +653,321 @@
         }
       }, 0);
     });
+  }
+
+  // ====== 飞书一键授权（OAuth 2.0 Device Flow · RFC 8628）======
+  // 飞书各语言 SDK 里的「一键创建应用」（register_app / registerApp）底层就是这个协议：
+  //   begin  → 拿到 device_code + 扫码链接
+  //   poll   → 用户扫码确认后，直接返回 App ID + App Secret
+  // 端点公开，且扩展页面有 host_permissions、fetch 不受 CORS 限制 —— 所以整条链路
+  // 都能在插件里跑完，不需要任何自建后端。
+  const AUTH_HOST = 'https://accounts.feishu.cn';
+  const AUTH_HOST_LARK = 'https://accounts.larksuite.com';
+  const AUTH_PATH = '/oauth/v1/app/registration';
+  // 权限只要这两个：多维表格读写 + 云空间文件读写（上传图片素材要用）
+  const AUTH_SCOPES = { tenant: ['bitable:app', 'drive:drive'] };
+  const APP_NAME = '前程-灵感素材库';
+  const APP_DESC = '把小红书 / 网页素材一键收进飞书多维表格';
+  // 应用头像必须是公网可访问的图片，直接用仓库里的图标
+  const APP_AVATAR = 'https://raw.githubusercontent.com/pengqiancheng-sys/xhs-collector/main/icons/icon128.png';
+
+  const appAuthUrl = (id) => `https://open.feishu.cn/app/${id}/auth`;
+  const appVersionUrl = (id) => `https://open.feishu.cn/app/${id}/version`;
+
+  let authFlow = null;
+
+  // addons 编码（飞书侧固定的解码管线）：
+  //   JSON.stringify → gzip → base64 → URL-safe（'+'→'-'、'/'→'_'、去掉末尾 '='）
+  // 浏览器里用 CompressionStream('gzip') 就能做，不需要引任何三方库。
+  async function encodeAddons(addons) {
+    const stream = new Blob([JSON.stringify(addons)]).stream().pipeThrough(new CompressionStream('gzip'));
+    const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  async function authPost(host, params) {
+    const res = await fetch(host + AUTH_PATH, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(params).toString(),
+    });
+    // ⚠️ RFC 8628 的 authorization_pending / slow_down 是 HTTP 400 回来的，
+    //    所以非 2xx 也必须照样解析 body，不能一看到状态码就抛错。
+    const text = await res.text();
+    try { return JSON.parse(text); }
+    catch (e) { throw new Error(`飞书返回了无法解析的内容（HTTP ${res.status}）`); }
+  }
+
+  function remainText(expiresAt) {
+    const s = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
+    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  function renderAuthStatus(level, text) {
+    const box = DOM['auth-status'];
+    if (!box) return;
+    box.className = `auth-status ${level}`;
+    box.textContent = text;
+  }
+
+  function setAuthButtons(state) {
+    const show = (id, on) => DOM[id] && DOM[id].classList.toggle('hidden', !on);
+    show('btn-auth-create', state === 'idle');
+    show('btn-auth-bind', state === 'idle');
+    show('btn-auth-open', state === 'pending' || state === 'done');
+    show('btn-auth-cancel', state === 'pending');
+  }
+
+  function stopAuthFlow() {
+    if (authFlow && authFlow.timer) clearTimeout(authFlow.timer);
+    authFlow = null;
+    setAuthButtons('idle');
+  }
+
+  async function startAuthFlow(mode, appId) {
+    stopAuthFlow();
+    setAuthButtons('pending');
+    renderAuthStatus('loading', '正在向飞书申请授权链接…');
+    try {
+      const begin = await authPost(AUTH_HOST, {
+        action: 'begin',
+        archetype: 'PersonalAgent',
+        auth_method: 'client_secret',
+        request_user_info: 'open_id',
+      });
+      if (!begin.device_code || !begin.verification_uri_complete) {
+        throw new Error(begin.error_description || begin.error || '飞书没有返回 device_code');
+      }
+
+      const url = new URL(begin.verification_uri_complete);
+      url.searchParams.set('from', 'ext');
+      url.searchParams.set('source', 'xhs-collector');
+      url.searchParams.set('tp', 'ext');
+      url.searchParams.set('name', APP_NAME);
+      url.searchParams.set('desc', APP_DESC);
+      url.searchParams.set('avatar', APP_AVATAR);
+      // 权限/事件/回调预填到确认页，用户点确认即生效
+      url.searchParams.set('addons', await encodeAddons({ preset: false, scopes: AUTH_SCOPES }));
+      if (mode === 'bind') {
+        const id = String(appId || '').trim();
+        if (!APP_ID_RE.test(id)) throw new Error('请先在第 2 步填入/选好 App ID，再来绑定');
+        url.searchParams.set('clientID', id);
+      } else {
+        url.searchParams.set('createOnly', 'true');
+      }
+
+      authFlow = {
+        host: AUTH_HOST,
+        deviceCode: begin.device_code,
+        interval: (begin.interval || 5) * 1000,
+        expiresAt: Date.now() + (begin.expires_in || 600) * 1000,
+        url: url.toString(),
+        mode,
+        appId: mode === 'bind' ? String(appId || '').trim() : '',
+        unknowns: 0,
+      };
+      openTab(authFlow.url);
+      renderScanStatus();
+      schedulePoll();
+    } catch (e) {
+      stopAuthFlow();
+      renderAuthStatus('error', `❌ 申请授权链接失败：${e.message}`);
+    }
+  }
+
+  function renderScanStatus(extra) {
+    if (!authFlow) return;
+    const tip = authFlow.mode === 'bind'
+      ? '已打开飞书授权页 —— 用飞书 App 扫码，确认给这个应用补上权限'
+      : '已打开飞书授权页 —— 用飞书 App 扫码，确认应用名和权限后点确定';
+    renderAuthStatus('scan', `${extra ? extra + '　' : ''}${tip}（二维码剩余 ${remainText(authFlow.expiresAt)}）`);
+  }
+
+  function schedulePoll() {
+    if (!authFlow) return;
+    authFlow.timer = setTimeout(pollAuth, authFlow.interval);
+  }
+
+  async function pollAuth() {
+    if (!authFlow) return;
+    if (Date.now() > authFlow.expiresAt) {
+      stopAuthFlow();
+      renderAuthStatus('error', '⏰ 二维码已过期（有效期约 1 小时）。点「↗ 重新打开授权页」再来一次。');
+      return;
+    }
+    const flow = authFlow;
+    try {
+      const r = await authPost(flow.host, { action: 'poll', device_code: flow.deviceCode });
+
+      // 成功：直接拿到凭据
+      if (r.client_id && r.client_secret) return onAuthSuccess(r);
+      // 绑定已有应用时，飞书可能只回 client_id 不回 secret —— 那就只回填 App ID，
+      // 提示用户手动复制 Secret（插件在技术上永远读不到打码的 Secret）。
+      if (r.client_id && flow.mode === 'bind') return onAuthSuccess({ ...r, noSecret: true });
+      if (flow.mode === 'bind' && r.error === 'access_denied') {
+        stopAuthFlow();
+        renderAuthStatus('error', '你在飞书里拒绝了授权。可以点「↗ 重新打开授权页」再试。');
+        return;
+      }
+      if (r.error === 'access_denied') {
+        stopAuthFlow();
+        renderAuthStatus('error', '你在飞书里拒绝了授权。可以点「↗ 重新打开授权页」再试。');
+        return;
+      }
+      if (r.error === 'expired_token') {
+        stopAuthFlow();
+        renderAuthStatus('error', '⏰ 二维码已过期。点「↗ 重新打开授权页」再来一次。');
+        return;
+      }
+      if (r.error === 'slow_down') {
+        flow.interval += 5000;
+      } else if (r.error && r.error !== 'authorization_pending') {
+        // 未知错误不立刻判死：偶发抖动很常见，连错 6 次才放弃
+        if (++flow.unknowns > 6) {
+          stopAuthFlow();
+          renderAuthStatus('error', `❌ 飞书返回：${r.error_description || r.error}`);
+          return;
+        }
+      } else {
+        flow.unknowns = 0;
+      }
+
+      // 国际版租户 → 换域名继续轮询
+      if (r.user_info && r.user_info.tenant_brand === 'lark') flow.host = AUTH_HOST_LARK;
+
+      renderScanStatus();
+      schedulePoll();
+    } catch (e) {
+      if (++flow.unknowns > 6) {
+        stopAuthFlow();
+        renderAuthStatus('error', `❌ 轮询失败：${e.message}`);
+        return;
+      }
+      renderScanStatus('网络抖动，正在重试…');
+      schedulePoll();
+    }
+  }
+
+  async function onAuthSuccess(r) {
+    const mode = authFlow ? authFlow.mode : 'create';
+    stopAuthFlow();
+
+    DOM['cfg-appId'].value = r.client_id;
+    DOM['cfg-appId'].dispatchEvent(new Event('input', { bubbles: true }));
+    DOM['btn-open-app-baseinfo'].dataset.appid = r.client_id;
+    if (DOM['btn-open-app-auth']) DOM['btn-open-app-auth'].dataset.appid = r.client_id;
+    if (DOM['btn-open-app-version']) DOM['btn-open-app-version'].dataset.appid = r.client_id;
+
+    if (r.client_secret) {
+      DOM['cfg-appSecret'].value = r.client_secret;
+      DOM['cfg-appSecret'].dispatchEvent(new Event('input', { bubbles: true }));
+      await saveAllConfig();
+      setAuthButtons('done');
+      renderAuthStatus('ok',
+        `✅ 完成！App ID 和 App Secret 已自动填入并保存（${r.client_id}）。` +
+        '下一步：去第 3 步点「🏗️ 一键建表并绑定」。');
+      showSaveStatus('saved', '凭证已自动填入并保存');
+    } else {
+      await saveAllConfig();
+      setAuthButtons('done');
+      renderAuthStatus('ok',
+        `✅ 已绑定应用 ${r.client_id}，但飞书这次没有回传 App Secret（它能读不到就不回）。` +
+        '请点下面的「🔑 去复制 App Secret」，粘到第 2 步的输入框里。');
+    }
+    setAuthExtraLinks(true);
+    refreshWizard();
+  }
+
+  function setAuthExtraLinks(show) {
+    ['btn-open-app-auth', 'btn-open-app-version'].forEach(id => {
+      const el = DOM[id];
+      if (!el) return;
+      el.classList.toggle('hidden', !show);
+      el.dataset.appid = el.dataset.appid || DOM['cfg-appId'].value.trim();
+    });
+  }
+
+  function setupAuthUI() {
+    DOM['btn-auth-create']?.addEventListener('click', () => startAuthFlow('create'));
+    DOM['btn-auth-bind']?.addEventListener('click', () => startAuthFlow('bind', DOM['cfg-appId'].value.trim()));
+    DOM['btn-auth-open']?.addEventListener('click', () => { if (authFlow) openTab(authFlow.url); });
+    DOM['btn-auth-cancel']?.addEventListener('click', () => {
+      stopAuthFlow();
+      renderAuthStatus('error', '已停止轮询。可以重新发起。');
+    });
+    DOM['btn-open-app-auth']?.addEventListener('click', (e) => {
+      const id = e.currentTarget.dataset.appid || DOM['cfg-appId'].value.trim();
+      if (APP_ID_RE.test(id || '')) openTab(appAuthUrl(id));
+    });
+    DOM['btn-open-app-version']?.addEventListener('click', (e) => {
+      const id = e.currentTarget.dataset.appid || DOM['cfg-appId'].value.trim();
+      if (APP_ID_RE.test(id || '')) openTab(appVersionUrl(id));
+    });
+
+    // 一键建表
+    DOM['btn-build-table']?.addEventListener('click', buildItable);
+  }
+
+  async function buildItable() {
+    const btn = DOM['btn-build-table'];
+    const box = DOM['itable-result'];
+    const appId = DOM['cfg-appId'].value.trim();
+    const appSecret = DOM['cfg-appSecret'].value.trim();
+    if (!appId || !appSecret) {
+      showConnectionStatus('error', '❌ 请先完成第 1、2 步：拿到并填好 App ID 与 App Secret');
+      return;
+    }
+    if (btn) btn.disabled = true;
+    if (box) { box.className = 'connection-result loading'; box.textContent = '⏳ 正在新建多维表格并写入 14 个字段…'; }
+
+    let r;
+    try {
+      r = await send({ type: 'settings:create-itable', appId, appSecret });
+    } catch (e) {
+      r = { success: false, error: e.message };
+    }
+    if (btn) btn.disabled = false;
+
+    if (!r || !r.success) {
+      if (box) { box.className = 'connection-result error'; box.textContent = `❌ 建表失败：${r ? r.error : '未知错误'}`; }
+      return;
+    }
+
+    // 回填并保存
+    DOM['cfg-bitableUrl'].value = r.url;
+    DOM['cfg-appToken'].value = r.appToken;
+    DOM['cfg-tableId'].value = r.tableId;
+    DOM['cfg-tableName'].value = r.tableName;
+    config.tables = [{ id: r.tableId, name: r.tableName }];
+    renderTableSelect(config.tables, r.tableId);
+
+    // 顺手把字段读回来并自动映射 —— 新表就是照规格建的，映射必然全中
+    try {
+      const rf = await send({ type: 'settings:fetch-fields', appToken: r.appToken, tableId: r.tableId, appId, appSecret });
+      if (rf && rf.success) {
+        tableFields = rf.fields;
+        config.tableFields = rf.fields;
+        autoMap();
+      }
+    } catch (e) { /* 映射失败不影响建表结果 */ }
+
+    await saveAllConfig();
+
+    const warn = r.failed && r.failed.length
+      ? `　⚠️ 有 ${r.failed.length} 个字段没建成（${r.failed.join('、')}），去表里手动补一下。`
+      : '';
+    if (box) {
+      box.className = r.failed && r.failed.length ? 'connection-result' : 'connection-result success';
+      box.innerHTML = '';
+      box.textContent =
+        `✅ 已建好「${r.tableName}」，${r.fieldCount}/${r.total} 个字段到位，并已自动绑定 + 完成字段映射。` + warn;
+    }
+    const link = DOM['itable-link'];
+    if (link) { link.href = r.url; link.classList.remove('hidden'); }
+    showSaveStatus('saved', '已新建表格并绑定');
+    refreshWizard();
   }
 
   async function copyText(text, btn, okText) {

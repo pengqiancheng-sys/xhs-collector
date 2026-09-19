@@ -293,6 +293,98 @@ body {
 }
 .btn-danger:hover { background: #fee4e2; }
 .btn-sm { padding: 7px 13px; font-size: 12.5px; }
+/* 幽灵按钮：次要动作（重新打开授权页 / 停止 / 去开权限）。
+   文字用 --ink-2（对白底 8.05:1），不用 --ink-3，避免小字偏浅。 */
+.btn-ghost {
+  background: transparent;
+  color: var(--ink-2);
+  border: 1px solid var(--line-2);
+}
+.btn-ghost:hover:not(:disabled) { background: #fff; color: var(--ink); }
+a.btn { text-decoration: none; }
+
+/* ===== 第 1 步：扫码一键授权卡片 ===== */
+.auth-card {
+  margin-top: 4px;
+  padding: 14px 15px;
+  border: 1px solid #ffd0d9;
+  border-radius: 12px;
+  background: var(--red-soft);
+}
+.auth-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--red-strong);
+  color: #fff;                 /* 白字压 #e01f3d = 4.74:1 */
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.auth-title {
+  display: block;
+  margin-top: 9px;
+  font-size: 14.5px;
+  color: var(--ink);
+}
+.auth-sub {
+  margin: 6px 0 12px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-2);
+}
+/* 授权状态条：四种状态都用「深字压浅底」，全部 ≥4.5:1 */
+.auth-status {
+  margin-top: 11px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+.auth-status.loading { background: #fffaeb; color: var(--warn); }   /* 5.43:1 */
+.auth-status.scan    { background: #eef4ff; color: #1d4ed8; }       /* 6.07:1 */
+.auth-status.ok      { background: #ecfdf3; color: #027a48; }       /* 5.41:1 */
+.auth-status.error   { background: #fef3f2; color: var(--danger); } /* 6.57:1 */
+
+/* ===== 手动方式折叠区 ===== */
+.manual-path {
+  margin-top: 14px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--sunken);
+}
+.manual-path[open] { padding-bottom: 13px; }
+.manual-path > summary {
+  padding: 11px 0;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);         /* 8.05:1，别用 --ink-3 */
+  list-style: none;
+}
+.manual-path > summary::-webkit-details-marker { display: none; }
+.manual-path > summary::before { content: '▸ '; }
+.manual-path[open] > summary::before { content: '▾ '; }
+.manual-path > summary:hover { color: var(--ink); }
+.manual-path > *:not(summary) { margin-bottom: 12px; }
+.manual-path > *:last-child { margin-bottom: 0; }
+
+/* ===== 第 3 步：一键建表 ===== */
+.build-table-box {
+  margin-top: 4px;
+  padding: 12px 13px;
+  border: 1px solid #ffd8b0;
+  border-radius: 11px;
+  background: #fffaf3;
+}
+.build-table-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 11px;
+}
+.build-table-head strong { font-size: 13px; color: var(--warn); }   /* 5.43:1 */
+.build-table-head span { font-size: 12px; line-height: 1.6; color: var(--ink-2); }
 
 /* ===== Connection result ===== */
 .connection-result {

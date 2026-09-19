@@ -10,7 +10,7 @@
   <main class="settings-app">
     <header class="settings-header">
       <h1><img class="logo" src="icons/icon32.png" alt="">前程-灵感素材库</h1>
-      <span class="version" id="version-tag">v4.1.2</span>
+      <span class="version" id="version-tag">v4.2.0</span>
     </header>
 
     <!-- 标签页导航 -->
@@ -39,26 +39,62 @@
           <strong>用你自己的应用 = 凭证只存在你本机</strong>，插件作者也读不到你的表格。
         </p>
 
-        <div class="btn-row">
-          <button class="btn btn-primary" id="btn-open-platform">🚀 打开我的飞书应用列表</button>
-          <button class="btn btn-secondary" id="btn-probe-feishu">🔄 读取已打开的应用</button>
+        <!-- 主路径：扫码授权（OAuth 2.0 设备授权流程，飞书官方 registerApp 用的就是这个协议） -->
+        <div class="auth-card">
+          <div class="auth-head">
+            <span class="auth-badge">推荐 · 不用手抄凭证</span>
+            <strong class="auth-title">⚡ 扫码一键创建并绑定</strong>
+            <p class="auth-sub">
+              点一下 → 打开飞书扫码页 → 用飞书 App 扫一下确认。<br>
+              插件会自动拿到 App ID 和 App Secret，并且顺手把「多维表格 + 云空间」权限一起申请好。
+            </p>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="btn-auth-create">⚡ 扫码创建新应用</button>
+            <button class="btn btn-secondary" id="btn-auth-bind">🔗 扫码绑定已有应用</button>
+            <button class="btn btn-ghost btn-sm hidden" id="btn-auth-open">↗ 重新打开授权页</button>
+            <button class="btn btn-ghost btn-sm hidden" id="btn-auth-cancel">停止等待</button>
+          </div>
+          <div id="auth-status" class="auth-status hidden"></div>
+          <div class="btn-row hidden" id="auth-extra">
+            <button class="btn btn-ghost btn-sm hidden" id="btn-open-app-auth">🛡️ 去开权限</button>
+            <button class="btn btn-ghost btn-sm hidden" id="btn-open-app-version">📤 去发布版本</button>
+          </div>
         </div>
 
-        <div class="two-path">
-          <div class="path-item">
-            <strong>还没建过应用</strong>
-            在打开的列表页右上角点「创建企业自建应用」，填个名字就行。
-          </div>
-          <div class="path-item">
-            <strong>已经有应用了</strong>
-            在列表里点进你要用的那个，回来点「读取已打开的应用」——插件会直接把 App ID 填好，不用手抄。
-          </div>
-        </div>
+        <details class="manual-path">
+          <summary>手动方式（一键授权用不了时）</summary>
 
-        <p class="card-desc" style="margin:12px 0 0;">
-          💡 未登录时上面这个链接会<b>直接打开扫码登录页</b>，用飞书 App 扫一下即可；<br>
-          已登录则直接进入控制台，不会重复要求登录。
-        </p>
+          <div class="btn-row">
+            <button class="btn btn-secondary" id="btn-open-platform">🚀 打开我的飞书应用列表</button>
+            <button class="btn btn-secondary" id="btn-probe-feishu">🔄 读取已打开的应用</button>
+          </div>
+
+          <div class="two-path">
+            <div class="path-item">
+              <strong>还没建过应用</strong>
+              在打开的列表页右上角点「创建企业自建应用」，填个名字就行。
+            </div>
+            <div class="path-item">
+              <strong>已经有应用了</strong>
+              在列表里点进你要用的那个，回来点「读取已打开的应用」——插件会直接把 App ID 填好，不用手抄。
+            </div>
+          </div>
+
+          <p class="card-desc" style="margin:12px 0 0;">
+            💡 未登录时上面这个链接会<b>直接打开扫码登录页</b>，用飞书 App 扫一下即可；<br>
+            已登录则直接进入控制台，不会重复要求登录。
+          </p>
+
+          <div class="perm-list">
+            <div class="perm-item"><span class="perm-dot"></span><div><strong>多维表格 — 查看</strong><br>列出数据表、读取字段结构</div></div>
+            <div class="perm-item"><span class="perm-dot"></span><div><strong>多维表格 — 查看、评论、编辑和管理</strong><br>新增记录（写入素材）</div></div>
+            <div class="perm-item"><span class="perm-dot"></span><div><strong>云空间 — 查看、评论、编辑和管理云空间中所有文件</strong><br>上传图片素材</div></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-secondary btn-sm" id="btn-copy-perms">📋 复制要开的权限</button>
+          </div>
+        </details>
 
         <div id="feishu-detected" class="detected-box hidden">
           <div class="detected-head">
@@ -67,20 +103,12 @@
           </div>
           <div id="feishu-detected-list" class="detected-list"></div>
           <p class="detected-hint">
-            App Secret 飞书默认打码、必须手动点「显示」再复制，插件读不到 —— 挑好应用后点下面的按钮直达复制页面。
+            点一下把 App ID 填进第 2 步。App Secret 飞书默认打码、必须手动点「显示」再复制，
+            插件读不到 —— 挑好应用后点下面的按钮直达复制页面。
           </p>
           <div class="btn-row">
             <button class="btn btn-secondary btn-sm" id="btn-open-app-baseinfo">🔑 去该应用复制 App Secret</button>
           </div>
-        </div>
-
-        <div class="perm-list">
-          <div class="perm-item"><span class="perm-dot"></span><div><strong>多维表格 — 查看</strong><br>列出数据表、读取字段结构</div></div>
-          <div class="perm-item"><span class="perm-dot"></span><div><strong>多维表格 — 查看、评论、编辑和管理</strong><br>新增记录（写入素材）</div></div>
-          <div class="perm-item"><span class="perm-dot"></span><div><strong>云空间 — 查看、评论、编辑和管理云空间中所有文件</strong><br>上传图片素材</div></div>
-        </div>
-        <div class="btn-row">
-          <button class="btn btn-secondary btn-sm" id="btn-copy-perms">📋 复制要开的权限</button>
         </div>
 
         <p class="card-desc" style="margin:12px 0 0;">
@@ -114,10 +142,25 @@
 
       <!-- 第 3 步 -->
       <div class="card">
-        <div class="card-title"><span class="step-num-badge">3</span>绑定你的多维表格</div>
+        <div class="card-title"><span class="step-num-badge">3</span>绑定多维表格</div>
         <p class="card-desc">
-          粘贴多维表格的完整链接，点「一键绑定」——插件会自动解析、读取数据表、并完成字段映射。
+          两条路：<b>没有表就让插件直接建一个</b>（推荐，字段和选项一次到位）；<br>
+          已经有表了就把完整链接粘在下面，点「一键绑定」。
         </p>
+
+        <div class="build-table-box">
+          <div class="build-table-head">
+            <strong>🏗️ 让插件建一张新表</strong>
+            <span>14 个字段全自动建好，「来源平台 / 选题来源 / 状态 / 优先级」的选项一并预建 —— 从根上避免写入报错 1254062</span>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="btn-build-table">🏗️ 一键建表并绑定</button>
+            <a class="btn btn-secondary hidden" id="itable-link" target="_blank" rel="noopener">↗ 打开新建的表格</a>
+          </div>
+          <div id="itable-result" class="connection-result hidden"></div>
+        </div>
+
+        <p class="card-desc" style="margin:16px 0 10px;">已经有表格了？把完整链接粘在下面 ——</p>
 
         <div class="form-group">
           <label>多维表格完整地址</label>
@@ -307,7 +350,7 @@
       <div class="card">
         <div class="card-title">🔄 版本与更新</div>
         <div class="update-box" id="update-box">
-          <span>当前版本 <strong id="cur-version">v4.1.2</strong></span>
+          <span>当前版本 <strong id="cur-version">v4.2.0</strong></span>
           <button class="btn btn-secondary btn-sm" id="btn-check-update">检查更新</button>
         </div>
         <div id="update-detail" class="connection-result hidden"></div>
@@ -330,7 +373,7 @@
       <div class="card">
         <div class="card-title">前程-灵感素材库 · 浏览器插件</div>
         <p class="card-desc" style="line-height:1.8;">
-          版本：<strong id="about-version">v4.1.2</strong><br>
+          版本：<strong id="about-version">v4.2.0</strong><br>
           开源地址：<a href="https://github.com/pengqiancheng-sys/xhs-collector" target="_blank">GitHub</a><br>
           许可证：MIT<br><br>
           把网页上的标题、正文、图片整理进你的飞书多维表格。<br>
