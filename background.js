@@ -67,7 +67,7 @@ let config = { ...DEFAULT_CONFIG };
   chrome.storage.onChanged.addListener(onStorageChange);
   setInterval(processQueue, 1000);
   initUpdate();
-  console.log('🚀 前程-灵感素材库 v4.2.0');
+  console.log('🚀 前程-灵感素材库 v4.2.1');
 })();
 
 async function loadConfig() {

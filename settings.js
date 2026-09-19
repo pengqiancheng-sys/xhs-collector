@@ -29,6 +29,9 @@
     await loadConfig();
     renderAll();
     setupEvents();
+    // ⚠️ 必须调用：扫码一键授权（btn-auth-create / btn-auth-bind）和
+    //    一键建表（btn-build-table）的事件监听都挂在 setupAuthUI 里
+    setupAuthUI();
     setupFeishuBridge();
     setupPromptTab();
     setupWizard();
@@ -192,14 +195,8 @@
     `).join('') || '<div style="color:#6b7280;font-size:12px;padding:8px 0;">暂无默认值</div>';
   }
 
-  function getMappedDataKey(fieldName) {
-    // 反向查找: 表格字段名 → 采集数据 key
-    const fm = config.fieldMapping || {};
-    for (const [key, val] of Object.entries(fm)) {
-      if (val === fieldName) return key;
-    }
-    return '';
-  }
+  // 反向查找「表格字段名 → 采集数据 key」的旧 helper 已删除：
+  // 全项目没有任何地方调用它（2026-09-19 排查"按钮没反应"时顺手清掉的死代码）
 
   function setupEvents() {
     // Tab 切换
