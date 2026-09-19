@@ -35,6 +35,7 @@
     el.btnBloggerStart.addEventListener('click', doBlogger);
     el.btnSettings.addEventListener('click', openSettings);
     el.btnCheckUpdate.addEventListener('click', checkUpdate);
+    el.updateStatus.addEventListener('click', openAbout);
 
     chrome.runtime.onMessage.addListener(msg => {
       if (msg.type === 'queue:update') {
@@ -87,7 +88,7 @@
   function renderPage(tab, pi) {
     if (!tab?.url) {
       el.platformBadge.innerHTML = '🌐 请打开页面';
-      el.pageTitle.textContent = '打开小红书、YouTube 或任意网页';
+      el.pageTitle.textContent = '打开小红书或任意网页';
       el.btnSavePage.disabled = true;
       return;
     }
@@ -182,10 +183,11 @@
       const r = await send({ type: 'update:check' });
       if (r?.update?.hu) {
         el.updateStatus.style.display = 'block';
-        el.updateStatus.textContent = `🆕 发现新版本 v${r.update.lv}`;
+        el.updateStatus.textContent = `🆕 发现新版本 v${r.update.lv} · 点这里看怎么更新`;
       } else {
         el.updateStatus.style.display = 'block';
         el.updateStatus.textContent = '✅ 当前已是最新版本';
+        setTimeout(() => { el.updateStatus.style.display = 'none'; }, 4000);
       }
     } catch {}
     el.btnCheckUpdate.disabled = false;
@@ -196,10 +198,15 @@
       const r = await send({ type: 'update:check' });
       if (r?.update?.hu) {
         el.updateStatus.style.display = 'block';
-        el.updateStatus.textContent = `🆕 发现新版本 v${r.update.lv}`;
+        el.updateStatus.textContent = `🆕 发现新版本 v${r.update.lv} · 点这里看怎么更新`;
         el.btnCheckUpdate.style.display = '';
       }
     } catch {}
+  }
+
+  // 打开设置页的「版本与更新」
+  function openAbout() {
+    chrome.tabs.create({ url: chrome.runtime.getURL('settings.html') + '#about' });
   }
 
   function openSettings() {

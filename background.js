@@ -67,7 +67,7 @@ let config = { ...DEFAULT_CONFIG };
   chrome.storage.onChanged.addListener(onStorageChange);
   setInterval(processQueue, 1000);
   initUpdate();
-  console.log('🚀 前程-灵感素材库 v4.1.0');
+  console.log('🚀 前程-灵感素材库 v4.1.1');
 })();
 
 async function loadConfig() {
@@ -137,6 +137,21 @@ async function getToken() {
   accessToken = d.tenant_access_token;
   tokenExpiresAt = Date.now() + d.expire * 1000;
   return accessToken;
+}
+
+// 把飞书返回的原始错误翻译成「用户能照着修」的话
+function describeAuthError(raw, appId) {
+  const m = String(raw || '');
+  if (/app_id|app_secret|invalid|10003|10014|not\s*found/i.test(m)) {
+    const hint = (appId && !/^cli_/.test(appId))
+      ? ' 另外：App ID 通常以 cli_ 开头，你填的看起来不像。'
+      : '';
+    return `App ID 或 App Secret 不正确（飞书返回：${m}）。请回飞书开放平台 →「凭证与基础信息」重新复制，注意别多带空格。${hint}`;
+  }
+  if (/network|fetch|Failed to fetch|timeout/i.test(m)) {
+    return `网络请求失败（${m}）。检查一下网络，或稍后重试。`;
+  }
+  return m;
 }
 
 // ====== 飞书 API 代理 ======
@@ -217,6 +232,8 @@ async function fetchTableFields(appToken, tableId, appId, appSecret) {
       name: f.field_name,
       type: f.type, // 1=文本,2=数字,3=单选,4=多选,5=日期,7=复选框,11=人员,15=超链接,17=附件
       typeName: FIELD_TYPE_NAMES[f.type] || `类型${f.type}`,
+      // 单选/多选的已有选项名 —— 用于写入前预检，避免飞书报 1254062 SingleSelectFieldConvFail
+      options: (f.property?.options || []).map(o => o.name).filter(Boolean),
     }));
     return { success: true, fields };
   } catch (e) {
@@ -1099,6 +1116,25 @@ function handleMessage(msg, sender, sendResponse) {
         break;
       }
 
+      // 只验证凭证本身（不依赖表格），供配置向导第 2 步使用
+      case 'settings:verify-cred': {
+        const savedId = config.appId, savedSecret = config.appSecret;
+        config.appId = (msg.appId || savedId || '').trim();
+        config.appSecret = (msg.appSecret || savedSecret || '').trim();
+        accessToken = null; tokenExpiresAt = 0;
+        try {
+          if (!config.appId || !config.appSecret) throw new Error('请先填写 App ID 和 App Secret');
+          await getToken();
+          sendResponse({ success: true, message: 'App ID / App Secret 有效' });
+        } catch (e) {
+          sendResponse({ success: false, error: describeAuthError(e.message, config.appId) });
+        } finally {
+          config.appId = savedId; config.appSecret = savedSecret;
+          accessToken = null; tokenExpiresAt = 0;
+        }
+        break;
+      }
+
       case 'settings:test-connection': {
         try {
           if (!config.appId || !config.appSecret) {
@@ -1148,7 +1184,7 @@ async function checkUpdate(force) {
     const rm = await r.json();
     const lv = String(rm?.version || cv);
     const hu = compareVer(lv, cv) > 0;
-    await chrome.action.setBadgeBackgroundColor({ color: '#e8590c' }).catch(() => {});
+    await chrome.action.setBadgeBackgroundColor({ color: '#ff2442' }).catch(() => {});
     await chrome.action.setBadgeText({ text: hu ? 'NEW' : '' }).catch(() => {});
     await chrome.action.setTitle({ title: hu ? `v${lv}` : `v${cv}` }).catch(() => {});
     await chrome.storage.local.set({ updateState: { cv, lv, hu, ts: Date.now() } });
