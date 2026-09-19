@@ -10,7 +10,7 @@
   <main class="settings-app">
     <header class="settings-header">
       <h1><img class="logo" src="icons/icon32.png" alt="">前程-灵感素材库</h1>
-      <span class="version" id="version-tag">v4.2.1</span>
+      <span class="version" id="version-tag">v4.2.2</span>
     </header>
 
     <!-- 标签页导航 -->
@@ -43,15 +43,16 @@
         <div class="auth-card">
           <div class="auth-head">
             <span class="auth-badge">推荐 · 不用手抄凭证</span>
-            <strong class="auth-title">⚡ 扫码一键创建并绑定</strong>
+            <strong class="auth-title">⚡ 扫码一键创建或绑定</strong>
             <p class="auth-sub">
               点一下 → 打开飞书扫码页 → 用飞书 App 扫一下确认。<br>
-              插件会自动拿到 App ID 和 App Secret，并且顺手把「多维表格 + 云空间」权限一起申请好。
+              <strong>没有应用就新建，已经有就点「选择已有应用」</strong>，两种都在这一个页面里。<br>
+              插件会自动拿到 App ID 和 App Secret，并把多维表格所需的 8 个权限一起申请好。
             </p>
           </div>
           <div class="btn-row">
-            <button class="btn btn-primary" id="btn-auth-create">⚡ 扫码创建新应用</button>
-            <button class="btn btn-secondary" id="btn-auth-bind">🔗 扫码绑定已有应用</button>
+            <button class="btn btn-primary" id="btn-auth-create">⚡ 扫码创建 / 选择已有应用</button>
+            <button class="btn btn-secondary" id="btn-auth-bind">🔗 给已填的 App ID 补权限</button>
             <button class="btn btn-ghost btn-sm hidden" id="btn-auth-open">↗ 重新打开授权页</button>
             <button class="btn btn-ghost btn-sm hidden" id="btn-auth-cancel">停止等待</button>
           </div>
@@ -87,9 +88,10 @@
           </p>
 
           <div class="perm-list">
-            <div class="perm-item"><span class="perm-dot"></span><div><strong>多维表格 — 查看</strong><br>列出数据表、读取字段结构</div></div>
-            <div class="perm-item"><span class="perm-dot"></span><div><strong>多维表格 — 查看、评论、编辑和管理</strong><br>新增记录（写入素材）</div></div>
-            <div class="perm-item"><span class="perm-dot"></span><div><strong>云空间 — 查看、评论、编辑和管理云空间中所有文件</strong><br>上传图片素材</div></div>
+            <div class="perm-item"><span class="perm-dot"></span><div><strong>多维表格 — 创建多维表格 / 数据表 / 字段</strong><br>点「一键建表」时把 14 个字段的表格建出来</div></div>
+            <div class="perm-item"><span class="perm-dot"></span><div><strong>多维表格 — 查看数据表 / 字段</strong><br>读取表格结构，做字段映射和体检</div></div>
+            <div class="perm-item"><span class="perm-dot"></span><div><strong>多维表格 — 新增记录</strong><br>把采集到的素材写进去</div></div>
+            <div class="perm-item"><span class="perm-dot"></span><div><strong>云文档 — 上传图片和附件到云文档中</strong><br>把封面图 / 图片素材传成表格附件</div></div>
           </div>
           <div class="btn-row">
             <button class="btn btn-secondary btn-sm" id="btn-copy-perms">📋 复制要开的权限</button>
@@ -112,8 +114,10 @@
         </div>
 
         <p class="card-desc" style="margin:12px 0 0;">
-          ⚠️ 开完权限后，<strong>必须去「版本管理与发布」创建一个版本并发布</strong>。<br>
-          不发布权限不生效，接口会一直报「权限不足」——这一步最常被漏掉。
+          <strong>关于「发布版本」：</strong>用上面的扫码一键创建，飞书会自动把应用发布上线，<br>
+          而且这条发布路径<strong>不需要企业管理员审核</strong>，点完确认就已经生效了。<br>
+          只有你在开发者后台<strong>手动</strong>给一个已有应用加权限时，才需要自己去
+          「版本管理与发布」点一下「创建版本并发布」。
         </p>
       </div>
 
@@ -350,7 +354,7 @@
       <div class="card">
         <div class="card-title">🔄 版本与更新</div>
         <div class="update-box" id="update-box">
-          <span>当前版本 <strong id="cur-version">v4.2.1</strong></span>
+          <span>当前版本 <strong id="cur-version">v4.2.2</strong></span>
           <button class="btn btn-secondary btn-sm" id="btn-check-update">检查更新</button>
         </div>
         <div id="update-detail" class="connection-result hidden"></div>
@@ -373,7 +377,7 @@
       <div class="card">
         <div class="card-title">前程-灵感素材库 · 浏览器插件</div>
         <p class="card-desc" style="line-height:1.8;">
-          版本：<strong id="about-version">v4.2.1</strong><br>
+          版本：<strong id="about-version">v4.2.2</strong><br>
           开源地址：<a href="https://github.com/pengqiancheng-sys/xhs-collector" target="_blank">GitHub</a><br>
           许可证：MIT<br><br>
           把网页上的标题、正文、图片整理进你的飞书多维表格。<br>

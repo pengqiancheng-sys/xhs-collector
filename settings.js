@@ -482,16 +482,41 @@
   }
 
   // ====== 配置向导 ======
-  const PERM_TEXT = `请在飞书开放平台为你的应用开通以下权限（左侧「权限管理」里搜索关键词或权限点标识开通）：
+  const PERM_TEXT = `请在飞书开放平台为你的应用开通以下权限。
+推荐做法：左侧「权限管理」→ 右上角「批量导入/导出权限」，把下面这段 JSON 整个粘进去再点确认。
 
-1. 多维表格 — 查看、评论、编辑和管理        （权限点：bitable:app）
-2. 云空间 — 查看、评论、编辑和管理云空间中所有文件（权限点：drive:drive）
+{
+  "scopes": {
+    "tenant": [
+      "base:app:create",
+      "base:table:read",
+      "base:table:create",
+      "base:table:delete",
+      "base:field:read",
+      "base:field:create",
+      "base:record:create",
+      "docs:document.media:upload"
+    ],
+    "user": []
+  }
+}
 
-说明：只要这两个就够了。建表、读字段、写记录都靠 bitable:app；
-上传图片素材靠 drive:drive。别只开「多维表格 — 查看」，那是只读的，写不进去。
+各条对应的能力（怕批量导入用不了就按名字搜着开）：
+  多维表格 — 创建多维表格                base:app:create
+  多维表格 — 查看数据表                  base:table:read
+  多维表格 — 新增数据表                  base:table:create
+  多维表格 — 删除数据表                  base:table:delete
+  多维表格 — 查看字段                    base:field:read
+  多维表格 — 新增字段                    base:field:create
+  多维表格 — 新增记录                    base:record:create
+  云文档   — 上传图片和附件到云文档中     docs:document.media:upload
 
-⚠️ 开完权限后，必须去「版本管理与发布」创建一个版本并发布，权限才会真正生效。
-   不发布版本 = 接口一直返回「权限不足」，这是最常见的坑。`;
+说明：只要这 8 条就够了，都是「按接口最小必要」给的。
+别只开「多维表格 — 查看」，那是只读的，建不了表也写不进数据。
+
+⚠️ 开完权限后，要「创建版本并发布」，权限才会生效——
+   如果你是用插件里的扫码一键创建，飞书会自动发布，不需要这一步；
+   只有在开发者后台手动给已有应用加权限时，才要自己去「版本管理与发布」点一下。`;
 
   // 插件会写入的单选值 —— 表里必须预先建好这些选项，否则飞书报 1254062
   const REQUIRED_OPTIONS = {
@@ -661,8 +686,31 @@
   const AUTH_HOST = 'https://accounts.feishu.cn';
   const AUTH_HOST_LARK = 'https://accounts.larksuite.com';
   const AUTH_PATH = '/oauth/v1/app/registration';
-  // 权限只要这两个：多维表格读写 + 云空间文件读写（上传图片素材要用）
-  const AUTH_SCOPES = { tenant: ['bitable:app', 'drive:drive'] };
+  // ⚠️ 这里必须用「飞书一键建应用」目录里的新式权限点（base:* / docs:*）。
+  //    老的 bitable:app / drive:drive 在开发者后台手动开通是有效的，但**不在
+  //    launcher 落地页的权限目录里**，写进 addons 会被静默丢掉 → 确认页一条都预填不上。
+  //    目录来源：https://open.feishu.cn/lark-cli/apis/scopes.json（v1.0.96，21 个分类 / 467 个权限点）
+  //    下面 8 条 = 插件真实调用到的接口所需的最小集合，逐条对应：
+  //      base:app:create             POST   /bitable/v1/apps                     建多维表格
+  //      base:table:read             GET    .../tables                           列数据表
+  //      base:table:create           POST   .../tables                           建数据表
+  //      base:table:delete           DELETE .../tables/{tid}                     删掉 Base 自带的空表
+  //      base:field:read             GET    .../tables/{tid}/fields              读字段结构（字段映射）
+  //      base:field:create           POST   .../tables/{tid}/fields              建字段
+  //      base:record:create          POST   .../tables/{tid}/records             写素材
+  //      docs:document.media:upload  POST   /drive/v1/medias/upload_prepare…     传封面 / 图片素材
+  const AUTH_SCOPES = {
+    tenant: [
+      'base:app:create',
+      'base:table:read',
+      'base:table:create',
+      'base:table:delete',
+      'base:field:read',
+      'base:field:create',
+      'base:record:create',
+      'docs:document.media:upload',
+    ],
+  };
   const APP_NAME = '前程-灵感素材库';
   const APP_DESC = '把小红书 / 网页素材一键收进飞书多维表格';
   // 应用头像必须是公网可访问的图片，直接用仓库里的图标
@@ -741,19 +789,33 @@
       const url = new URL(begin.verification_uri_complete);
       url.searchParams.set('from', 'ext');
       url.searchParams.set('source', 'xhs-collector');
-      url.searchParams.set('tp', 'ext');
+      // ⚠️ 不要传 tp。launcher 里 tp 是「应用底座模板 ID」
+      //    （openclaw_plugin_template / lark_cli_template / default / minimal），
+      //    一旦 addons 被平台丢弃，tp 会直接顶成 manifestTemplateId —— 传 'ext' 这种
+      //    非模板值会走到一个不存在的模板上。来源追踪有 from 就够了。
       url.searchParams.set('name', APP_NAME);
       url.searchParams.set('desc', APP_DESC);
       url.searchParams.set('avatar', APP_AVATAR);
-      // 权限/事件/回调预填到确认页，用户点确认即生效
-      url.searchParams.set('addons', await encodeAddons({ preset: false, scopes: AUTH_SCOPES }));
+      // addons = 预填到飞书「确认权限」页的配置，用户点确认即生效。
+      //   preset:false → 走官方「最小基础模板」(minimal)：最终只包含下面显式声明的权限，
+      //                  不会顺带塞进机器人能力 / im / cardkit 等我们用不到的东西。
+      //   user:[]      → 显式写空数组（省略也等价于 []，写出来更清楚）。
+      // 另外 preset:false 还会命中 launcher 的 isMinimalBaseCreate 分支，
+      // 保证「确认权限」这一步一定会出现。
+      url.searchParams.set('addons', await encodeAddons({
+        scopes: { tenant: AUTH_SCOPES.tenant, user: [] },
+        preset: false,
+      }));
       if (mode === 'bind') {
+        // 带 clientID → 飞书把这条链接当成「更新这个已有应用」，用来增量补权限
         const id = String(appId || '').trim();
-        if (!APP_ID_RE.test(id)) throw new Error('请先在第 2 步填入/选好 App ID，再来绑定');
+        if (!APP_ID_RE.test(id)) throw new Error('请先在第 2 步填入/选好 App ID，再来补权限');
         url.searchParams.set('clientID', id);
-      } else {
-        url.searchParams.set('createOnly', 'true');
       }
+      // 新建路径**刻意不传** createOnly：
+      //   launcher 内部 canUseExistingAppEntry = !isCreateOnly && from !== 'backend_oneclick'，
+      //   只有不带 createOnly 时落地页才会出现「选择已有应用」入口。
+      //   → 所以一个二维码就同时覆盖「新建」和「选已有」，用户自己在飞书页面上挑。
 
       authFlow = {
         host: AUTH_HOST,
@@ -777,8 +839,8 @@
   function renderScanStatus(extra) {
     if (!authFlow) return;
     const tip = authFlow.mode === 'bind'
-      ? '已打开飞书授权页 —— 用飞书 App 扫码，确认给这个应用补上权限'
-      : '已打开飞书授权页 —— 用飞书 App 扫码，确认应用名和权限后点确定';
+      ? '已打开飞书授权页 —— 用飞书 App 扫码，给这个应用补上缺的权限'
+      : '已打开飞书授权页 —— 用飞书 App 扫码，页面上可以直接「新建应用」，也可以点「选择已有应用」';
     renderAuthStatus('scan', `${extra ? extra + '　' : ''}${tip}（二维码剩余 ${remainText(authFlow.expiresAt)}）`);
   }
 
@@ -800,14 +862,12 @@
 
       // 成功：直接拿到凭据
       if (r.client_id && r.client_secret) return onAuthSuccess(r);
-      // 绑定已有应用时，飞书可能只回 client_id 不回 secret —— 那就只回填 App ID，
-      // 提示用户手动复制 Secret（插件在技术上永远读不到打码的 Secret）。
-      if (r.client_id && flow.mode === 'bind') return onAuthSuccess({ ...r, noSecret: true });
-      if (flow.mode === 'bind' && r.error === 'access_denied') {
-        stopAuthFlow();
-        renderAuthStatus('error', '你在飞书里拒绝了授权。可以点「↗ 重新打开授权页」再试。');
-        return;
-      }
+      // 只回 client_id 不回 secret，两种来源都走这里：
+      //   ① 走「补权限」按钮绑了已有应用 —— 飞书不会重发已存在应用的 Secret
+      //   ② 走「创建」入口、但在飞书页面上点了「选择已有应用」—— 结果同上
+      // 两种都只回填 App ID，再提示手动复制 Secret
+      // （插件在技术上永远读不到飞书打码的 Secret）。
+      if (r.client_id) return onAuthSuccess({ ...r, noSecret: true });
       if (r.error === 'access_denied') {
         stopAuthFlow();
         renderAuthStatus('error', '你在飞书里拒绝了授权。可以点「↗ 重新打开授权页」再试。');
@@ -848,7 +908,6 @@
   }
 
   async function onAuthSuccess(r) {
-    const mode = authFlow ? authFlow.mode : 'create';
     stopAuthFlow();
 
     DOM['cfg-appId'].value = r.client_id;
@@ -870,7 +929,8 @@
       await saveAllConfig();
       setAuthButtons('done');
       renderAuthStatus('ok',
-        `✅ 已绑定应用 ${r.client_id}，但飞书这次没有回传 App Secret（它能读不到就不回）。` +
+        `✅ 已绑定应用 ${r.client_id}，但这次飞书没有回传 App Secret。` +
+        '（如果你在飞书页面上选的是「已有应用」，它不会重发那个应用的 Secret，这是正常的。）' +
         '请点下面的「🔑 去复制 App Secret」，粘到第 2 步的输入框里。');
     }
     setAuthExtraLinks(true);
