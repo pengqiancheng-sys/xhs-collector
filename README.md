@@ -483,6 +483,13 @@
 - 移除 `manifest.json` 里写法不规范的 `update_url`（Chrome 要求 XML 更新描述文件，指向 JSON 实际无效）
 - 新增 `LICENSE`（MIT）与 `setup-prompt.txt`
 
+**外观**
+- **全新应用图标**：书签 + 灵感火花，品牌橙渐变（`#FF9A3D → #E8590C`）。
+  书签 = 收藏进库，火花 = 灵感；替换掉原仓库那个纯色方块占位图。
+- 16 / 32px 单独调优笔画（字形放大 1.16× / 1.07×），不是简单缩小，保证小尺寸不糊
+- `manifest.json` 的 `icons` 补充 32px 尺寸
+- 侧边栏头部品牌位由 emoji `📦` 换成真实图标，界面与图标统一
+
 **缺陷修复**
 - 删除 `background.js` 中 122 行死代码（`sidepanel:get-context` 分支误粘贴了 `capturePage` 的 DOM 提取代码，内含未定义的变量，参数求值即抛异常并被静默吞掉，从未执行成功）
 - 去除 `page-observer.js` 中的重复函数声明（`parseCountText` 被定义了三次、`getXhsInitialState` 与 `findNoteInState` 各两次），并修回被覆盖掉的 `k` 单位支持
