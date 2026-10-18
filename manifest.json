@@ -32,7 +32,6 @@
         "https://www.rednote.com/*"
       ],
       "js": [
-        "vendor/md5.min.js",
         "xhs-bridge.js"
       ],
       "run_at": "document_start",
