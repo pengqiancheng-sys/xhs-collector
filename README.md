@@ -7,7 +7,7 @@
 **当前版本：v4.2.2** ｜ 许可：MIT
 
 > **前程序章** · 钱程（前程）的电商运营与 AI 工具实践品牌。
-> 博客：[前程往事 mxiu.cc](https://www.mxiu.cc) ｜ 公众号 / 小程序：前程序章 ｜ 品牌说明：[什么是前程序章](https://www.mxiu.cc/qiancheng-xuzhang/)
+> 博客：[前程序章 mxiu.cc](https://www.mxiu.cc) ｜ 公众号 / 小程序：前程序章 ｜ 品牌说明：[什么是前程序章](https://www.mxiu.cc/qiancheng-xuzhang/)
 
 > 📖 **完整使用教程与踩坑记录**：[mxiu.cc](https://www.mxiu.cc)
 > 从安装到接进选题流程的实战笔记、字段设计取舍，以及这个插件背后的思考。
